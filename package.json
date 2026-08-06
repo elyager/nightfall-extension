@@ -1,0 +1,23 @@
+{
+  "name": "nightfall-extension",
+  "description": "Fast, private dark mode for the web.",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "wxt",
+    "build": "wxt build",
+    "zip": "wxt zip",
+    "compile": "tsc --noEmit",
+    "test": "vitest run",
+    "benchmark": "npm run build && node scripts/benchmark.mjs",
+    "postinstall": "wxt prepare"
+  },
+  "devDependencies": {
+    "puppeteer-core": "^25.5.0",
+    "typescript": "^5.9.3",
+    "vite": "^8.1.5",
+    "vitest": "^4.1.10",
+    "wxt": "^0.21.3"
+  }
+}
