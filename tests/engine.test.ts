@@ -18,6 +18,12 @@ describe('base theme styles', () => {
     expect(css).toContain('background-color: var(--nightfall-element-bg) !important');
   });
 
+  it('conceals newly inserted subtrees until their adaptive pass finishes', () => {
+    const css = createBaseCss(SLATE_BLUE);
+    expect(css).toContain('[data-nightfall-pending]');
+    expect(css).toContain('opacity: 0 !important');
+  });
+
   it('preserves foreground colors when an image is reached before a solid surface', () => {
     expect(shouldPreserveForeground([
       { image: 'none', color: { r: 0, g: 0, b: 0, a: 0 } },

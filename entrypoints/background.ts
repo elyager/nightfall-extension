@@ -9,6 +9,11 @@ import { getSiteSettings, loadSettings, saveSettings, updateSiteSettings } from 
 
 export default defineBackground(() => {
   const scriptId = 'nightfall-engine';
+  const bootstrapScripts = [
+    { id: 'nightfall-bootstrap-slate-blue', mode: 'slate-blue', css: '/bootstrap/slate-blue.css' },
+    { id: 'nightfall-bootstrap-linear-dark', mode: 'linear-dark', css: '/bootstrap/linear-dark.css' },
+    { id: 'nightfall-bootstrap-github-dark', mode: 'github-dark', css: '/bootstrap/github-dark.css' },
+  ] as const;
   let registrationQueue: Promise<void> = Promise.resolve();
   let pendingPopupReopen: {
     tabId: number;
@@ -17,17 +22,22 @@ export default defineBackground(() => {
   } | null = null;
 
   const syncRegisteredOrigins = async () => {
-    const permissions = await browser.permissions.getAll();
+    const [permissions, settings] = await Promise.all([
+      browser.permissions.getAll(),
+      loadSettings(),
+    ]);
     const origins = (permissions.origins ?? [])
       .filter((origin) => origin.startsWith('http://') || origin.startsWith('https://'))
       .sort();
-    const [existing] = await browser.scripting.getRegisteredContentScripts({
-      ids: [scriptId],
+    const registrationIds = [scriptId, ...bootstrapScripts.map(({ id }) => id)];
+    const existing = await browser.scripting.getRegisteredContentScripts({
+      ids: registrationIds,
     });
+    const existingIds = new Set(existing.map(({ id }) => id));
 
     if (!origins.length) {
-      if (existing) {
-        await browser.scripting.unregisterContentScripts({ ids: [scriptId] });
+      if (existing.length) {
+        await browser.scripting.unregisterContentScripts({ ids: existing.map(({ id }) => id) });
       }
       return;
     }
@@ -42,12 +52,43 @@ export default defineBackground(() => {
       persistAcrossSessions: true,
     };
 
-    if (!existing) {
+    if (!existingIds.has(scriptId)) {
       await browser.scripting.registerContentScripts([registration]);
-      return;
+    } else {
+      await browser.scripting.updateContentScripts([registration]);
     }
 
-    await browser.scripting.updateContentScripts([registration]);
+    for (const bootstrap of bootstrapScripts) {
+      const matches = origins.filter((origin) => {
+        try {
+          const hostname = new URL(origin.replace('*.', '')).hostname;
+          const site = getSiteSettings(settings, hostname);
+          return site.enabled && site.mode === bootstrap.mode;
+        } catch {
+          return false;
+        }
+      });
+      if (!matches.length) {
+        if (existingIds.has(bootstrap.id)) {
+          await browser.scripting.unregisterContentScripts({ ids: [bootstrap.id] });
+        }
+        continue;
+      }
+      const bootstrapRegistration = {
+        id: bootstrap.id,
+        css: [bootstrap.css],
+        matches,
+        runAt: 'document_start' as const,
+        allFrames: true,
+        matchOriginAsFallback: true,
+        persistAcrossSessions: true,
+      };
+      if (existingIds.has(bootstrap.id)) {
+        await browser.scripting.updateContentScripts([bootstrapRegistration]);
+      } else {
+        await browser.scripting.registerContentScripts([bootstrapRegistration]);
+      }
+    }
   };
 
   const scheduleRegistrationSync = () => {
@@ -116,6 +157,11 @@ export default defineBackground(() => {
   });
   browser.permissions.onRemoved.addListener(() => {
     void scheduleRegistrationSync().catch(() => undefined);
+  });
+  browser.storage.onChanged.addListener((changes, area) => {
+    if (area === 'local' && changes.nightfallSettings) {
+      void scheduleRegistrationSync().catch(() => undefined);
+    }
   });
 
   browser.runtime.onMessage.addListener(

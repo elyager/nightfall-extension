@@ -1,0 +1,4 @@
+html:not([data-nightfall-bootstrap="off"]) {
+  background-color: #0d1117 !important;
+  color-scheme: dark !important;
+}

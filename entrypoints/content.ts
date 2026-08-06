@@ -3,7 +3,7 @@ import {
   type ContentMessage,
   type ContentResponse,
 } from '@/utils/messages';
-import { NightfallEngine, installBootstrap } from '@/utils/engine';
+import { NightfallEngine } from '@/utils/engine';
 import {
   getSiteSettings,
   STORAGE_KEY,
@@ -41,7 +41,6 @@ export default defineContentScript({
     }
     if (typeof existingInstance === 'object') existingInstance.dispose();
 
-    installBootstrap();
     const engine = new NightfallEngine();
     let lastSettingsSignature = '';
     let latestRevision = 0;

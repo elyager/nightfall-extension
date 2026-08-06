@@ -28,6 +28,7 @@ const STYLE_ID = 'nightfall-styles';
 const BATCH_SIZE = 80;
 const MEDIA_SELECTOR = 'img, video, canvas, picture, iframe, object, embed, svg';
 const IMAGE_BACKED_TEXT_CLASS = 'nightfall-image-backed-text';
+const PENDING_ATTRIBUTE = 'data-nightfall-pending';
 
 interface BackgroundLayer {
   image: string;
@@ -51,6 +52,9 @@ html[data-nightfall="active"] {
 html[data-nightfall="active"] body {
   background-color: transparent !important;
   color: ${palette.textPrimary} !important;
+}
+html[data-nightfall="active"] [${PENDING_ATTRIBUTE}] {
+  opacity: 0 !important;
 }
 html[data-nightfall="active"] input,
 html[data-nightfall="active"] textarea,
@@ -160,26 +164,9 @@ html[data-nightfall-transition="active"] button {
 `;
 }
 
-export function installBootstrap(): void {
-  const attach = () => {
-    if (document.getElementById(BOOTSTRAP_ID)) return true;
-    if (!document.documentElement) return false;
-    const style = document.createElement('style');
-    style.id = BOOTSTRAP_ID;
-    style.textContent = `html { background: #16191f !important; color-scheme: dark !important; }`;
-    document.documentElement.append(style);
-    return true;
-  };
-
-  if (attach()) return;
-  const observer = new MutationObserver(() => {
-    if (attach()) observer.disconnect();
-  });
-  observer.observe(document, { childList: true });
-}
-
 function removeBootstrap(): void {
   document.getElementById(BOOTSTRAP_ID)?.remove();
+  document.documentElement.dataset.nightfallBootstrap = 'off';
 }
 
 function isLargeText(style: CSSStyleDeclaration): boolean {
@@ -225,6 +212,7 @@ export class NightfallEngine {
   private palette!: ThemePalette;
   private generation = 0;
   private colorCache = new Map<string, string>();
+  private pendingRoots = new Set<Element>();
   private refreshHandle?: number;
   private currentUrl = location.href;
   private status: PerformanceStatus = {
@@ -285,6 +273,7 @@ export class NightfallEngine {
     document.documentElement.dataset.nightfall = 'active';
     document.documentElement.dataset.nightfallTheme = this.palette.id;
     this.markStoredRepairs(document.documentElement);
+    this.markPending(document.body);
     if (userInitiated && !switchingPalette) this.enableTransition();
     this.status = {
       ...this.emptyStatus('fast'),
@@ -313,6 +302,8 @@ export class NightfallEngine {
     this.scheduled = false;
     this.adaptive = false;
     this.colorCache.clear();
+    this.pendingRoots.forEach((element) => element.removeAttribute(PENDING_ATTRIBUTE));
+    this.pendingRoots.clear();
     document.documentElement.removeAttribute('data-nightfall');
     document.documentElement.removeAttribute('data-nightfall-theme');
     document.documentElement.removeAttribute('data-nightfall-transition');
@@ -385,8 +376,10 @@ export class NightfallEngine {
           if (!(node instanceof Element) || isExtensionElement(node)) continue;
           this.markStoredRepairs(node);
           if (!this.adaptive && this.subtreeNeedsAdaptation(node)) {
+            this.markPending(node);
             this.enableAdaptive(node);
           } else if (this.adaptive) {
+            this.markPending(node);
             this.enqueue(node, true);
           }
         }
@@ -449,7 +442,29 @@ export class NightfallEngine {
       if (observer && this.observer === observer) this.observeDocument();
     }
     this.status.processedNodes += count;
+    this.revealCompletedRoots();
     if (this.queue.length) this.scheduleBatch();
+  }
+
+  private markPending(element: Element): void {
+    if (!(element instanceof HTMLElement) || element.matches(MEDIA_SELECTOR)) return;
+    element.setAttribute(PENDING_ATTRIBUTE, '');
+    this.pendingRoots.add(element);
+  }
+
+  private revealCompletedRoots(): void {
+    for (const root of this.pendingRoots) {
+      if (this.queued.has(root)) continue;
+      let hasQueuedDescendant = false;
+      for (const descendant of root.querySelectorAll('*')) {
+        if (!this.queued.has(descendant)) continue;
+        hasQueuedDescendant = true;
+        break;
+      }
+      if (hasQueuedDescendant) continue;
+      root.removeAttribute(PENDING_ATTRIBUTE);
+      this.pendingRoots.delete(root);
+    }
   }
 
   private elementNeedsAdaptation(element: Element): boolean {
