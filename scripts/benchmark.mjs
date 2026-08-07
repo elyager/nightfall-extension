@@ -399,11 +399,13 @@ try {
   await pickerPopup.waitForSelector('#inspect-element:not([disabled])');
   await pickerPopup.evaluate(() => document.querySelector('#inspect-element').click());
   await page.waitForSelector('#nightfall-element-picker');
+  await page.bringToFront();
   const cardPoint = await page.evaluate(() => {
-    const rect = document.querySelector('.card').getBoundingClientRect();
-    return { x: rect.left + rect.width - 12, y: rect.top + rect.height - 12 };
+    const rect = document.querySelector('.card > h1').getBoundingClientRect();
+    return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
   });
   await page.mouse.move(cardPoint.x, cardPoint.y);
+  await page.keyboard.press('ArrowUp');
   await page.mouse.click(cardPoint.x, cardPoint.y);
   await page.waitForFunction(
     () => document.querySelectorAll('[data-nightfall-repair="true"]').length === 1,
@@ -526,7 +528,7 @@ try {
     fullNavigation.styleCount !== 1 ||
     savedElementFix.count !== 1 ||
     savedElementFix.path !== '/full-navigation' ||
-    !savedElementFix.selector ||
+    savedElementFix.selector !== 'div.card' ||
     persistedElementFix.path !== '/full-navigation' ||
     persistedElementFix.repairedCount !== 1 ||
     clearedElementFix !== 0 ||

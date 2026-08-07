@@ -79,7 +79,7 @@ export default defineContentScript({
       const hint = document.createElement('div');
       overlay.style.cssText = 'position:fixed;z-index:2147483646;pointer-events:none;border:2px solid #55c2ff;background:rgba(60,174,235,.16);box-sizing:border-box;display:none';
       label.style.cssText = 'position:fixed;z-index:2147483647;pointer-events:none;padding:4px 7px;border-radius:5px;background:#1676a8;color:white;font:600 11px/1.2 ui-monospace,monospace;max-width:340px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:none';
-      hint.textContent = 'Click an element to fix it · Esc to cancel';
+      hint.textContent = 'Click to select · ↑ parent · ↓ child · Esc cancel';
       hint.style.cssText = 'position:fixed;z-index:2147483647;pointer-events:none;top:12px;left:50%;transform:translateX(-50%);padding:8px 12px;border:1px solid #4ba8d5;border-radius:8px;background:#111820;color:#e8f7ff;box-shadow:0 8px 28px rgba(0,0,0,.35);font:600 12px/1.2 system-ui,sans-serif';
       shadow.append(overlay, label, hint);
       document.documentElement.append(host);
@@ -87,7 +87,22 @@ export default defineContentScript({
       cursorStyle.id = 'nightfall-picker-cursor';
       cursorStyle.textContent = 'html, html * { cursor: crosshair !important; }';
       document.documentElement.append(cursorStyle);
+      let hoveredTarget: Element | null = null;
       let target: Element | null = null;
+
+      const showTarget = (next: Element) => {
+        target = next;
+        const rect = next.getBoundingClientRect();
+        overlay.style.display = 'block';
+        overlay.style.left = `${rect.left}px`;
+        overlay.style.top = `${rect.top}px`;
+        overlay.style.width = `${rect.width}px`;
+        overlay.style.height = `${rect.height}px`;
+        label.textContent = next.localName + (next.id ? `#${next.id}` : '');
+        label.style.display = 'block';
+        label.style.left = `${Math.max(4, rect.left)}px`;
+        label.style.top = `${Math.max(4, rect.top - 25)}px`;
+      };
 
       const cleanup = () => {
         window.removeEventListener('pointermove', onPointerMove, true);
@@ -105,17 +120,9 @@ export default defineContentScript({
             !item.id.startsWith('nightfall-'),
         );
         if (!next) return;
-        target = next;
-        const rect = next.getBoundingClientRect();
-        overlay.style.display = 'block';
-        overlay.style.left = `${rect.left}px`;
-        overlay.style.top = `${rect.top}px`;
-        overlay.style.width = `${rect.width}px`;
-        overlay.style.height = `${rect.height}px`;
-        label.textContent = next.localName + (next.id ? `#${next.id}` : '');
-        label.style.display = 'block';
-        label.style.left = `${Math.max(4, rect.left)}px`;
-        label.style.top = `${Math.max(4, rect.top - 25)}px`;
+        if (next === hoveredTarget) return;
+        hoveredTarget = next;
+        showTarget(next);
       };
       const onClick = (event: MouseEvent) => {
         if (!target) return;
@@ -142,10 +149,30 @@ export default defineContentScript({
         })().catch(() => showToast('Nightfall could not save this element'));
       };
       const onKeyDown = (event: KeyboardEvent) => {
-        if (event.key !== 'Escape') return;
-        event.preventDefault();
-        cleanup();
-        showToast('Element picker cancelled');
+        if (event.key === 'Escape') {
+          event.preventDefault();
+          cleanup();
+          showToast('Element picker cancelled');
+          return;
+        }
+        if (!target || !hoveredTarget) return;
+        if (event.key === 'ArrowUp') {
+          const parent = target.parentElement;
+          if (!parent || parent === document.documentElement) return;
+          event.preventDefault();
+          event.stopImmediatePropagation();
+          showTarget(parent);
+          return;
+        }
+        if (event.key === 'ArrowDown' && target !== hoveredTarget) {
+          let child = hoveredTarget;
+          while (child.parentElement && child.parentElement !== target) {
+            child = child.parentElement;
+          }
+          event.preventDefault();
+          event.stopImmediatePropagation();
+          showTarget(child);
+        }
       };
       window.addEventListener('pointermove', onPointerMove, true);
       window.addEventListener('click', onClick, true);
