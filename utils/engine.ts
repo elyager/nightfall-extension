@@ -29,7 +29,11 @@ const STYLE_ID = 'nightfall-styles';
 const BATCH_SIZE = 80;
 const MEDIA_SELECTOR = 'img, video, canvas, picture, iframe, object, embed, svg';
 const IMAGE_BACKED_TEXT_CLASS = 'nightfall-image-backed-text';
-const PENDING_ATTRIBUTE = 'data-nightfall-pending';
+
+export const NIGHTFALL_OBSERVER_OPTIONS: MutationObserverInit = {
+  childList: true,
+  subtree: true,
+};
 
 interface BackgroundLayer {
   image: string;
@@ -53,9 +57,6 @@ html[data-nightfall="active"] {
 html[data-nightfall="active"] body {
   background-color: transparent !important;
   color: ${palette.textPrimary} !important;
-}
-html[data-nightfall="active"] [${PENDING_ATTRIBUTE}] {
-  opacity: 0 !important;
 }
 html[data-nightfall="active"] input,
 html[data-nightfall="active"] textarea,
@@ -213,9 +214,7 @@ export class NightfallEngine {
   private palette!: ThemePalette;
   private generation = 0;
   private colorCache = new Map<string, string>();
-  private pendingRoots = new Set<Element>();
-  private refreshHandle?: number;
-  private currentUrl = location.href;
+  private currentPath = pagePath(location.href);
   private status: PerformanceStatus = {
     mode: 'original',
     active: false,
@@ -243,7 +242,7 @@ export class NightfallEngine {
     // already-transformed colors and also prevents Original from fully restoring
     // the page when this method returns early below.
     this.stop(false);
-    this.currentUrl = location.href;
+    this.currentPath = pagePath(location.href);
     const nativeDark = switchingPalette
       ? this.status.nativeDark
       : detectNativeDark();
@@ -274,7 +273,6 @@ export class NightfallEngine {
     document.documentElement.dataset.nightfall = 'active';
     document.documentElement.dataset.nightfallTheme = this.palette.id;
     this.markStoredRepairs(document.documentElement);
-    this.markPending(document.body);
     if (userInitiated && !switchingPalette) this.enableTransition();
     this.status = {
       ...this.emptyStatus('fast'),
@@ -292,10 +290,6 @@ export class NightfallEngine {
   }
 
   stop(removeBootstrapLayer = true): void {
-    if (this.refreshHandle !== undefined) {
-      window.clearTimeout(this.refreshHandle);
-      this.refreshHandle = undefined;
-    }
     this.observer?.disconnect();
     this.observer = undefined;
     this.queue = [];
@@ -303,8 +297,6 @@ export class NightfallEngine {
     this.scheduled = false;
     this.adaptive = false;
     this.colorCache.clear();
-    this.pendingRoots.forEach((element) => element.removeAttribute(PENDING_ATTRIBUTE));
-    this.pendingRoots.clear();
     document.documentElement.removeAttribute('data-nightfall');
     document.documentElement.removeAttribute('data-nightfall-theme');
     document.documentElement.removeAttribute('data-nightfall-transition');
@@ -334,12 +326,23 @@ export class NightfallEngine {
     }
   }
 
-  refreshSoon(): void {
-    if (this.refreshHandle !== undefined) return;
-    this.refreshHandle = window.setTimeout(() => {
-      this.refreshHandle = undefined;
-      void this.start(this.settings);
-    }, 16);
+  syncNavigation(): void {
+    const nextPath = pagePath(location.href);
+    if (nextPath === this.currentPath) return;
+    this.currentPath = nextPath;
+    if (document.documentElement.dataset.nightfall !== 'active') return;
+
+    const affectedElements = new Set(
+      document.querySelectorAll<HTMLElement>('[data-nightfall-repair="true"]'),
+    );
+    affectedElements.forEach((element) => {
+      element.removeAttribute('data-nightfall-repair');
+    });
+    this.markStoredRepairs(document.documentElement);
+    document.querySelectorAll<HTMLElement>('[data-nightfall-repair="true"]').forEach((element) => {
+      affectedElements.add(element);
+    });
+    affectedElements.forEach((element) => this.enqueue(element));
   }
 
   private installStyles(): void {
@@ -369,32 +372,12 @@ export class NightfallEngine {
 
   private observe(): void {
     this.observer = new MutationObserver((mutations) => {
-      if (location.href !== this.currentUrl) {
-        this.currentUrl = location.href;
-        this.refreshSoon();
-        return;
-      }
+      this.syncNavigation();
       for (const mutation of mutations) {
-        if (mutation.type === 'attributes') {
-          const target = mutation.target;
-          if (!(target instanceof Element) || isExtensionElement(target)) continue;
-          if (this.adaptive) {
-            this.enqueue(target, true);
-          } else if (this.subtreeNeedsAdaptation(target)) {
-            this.enableAdaptive(target);
-          }
-          continue;
-        }
         for (const node of mutation.addedNodes) {
           if (!(node instanceof Element) || isExtensionElement(node)) continue;
           this.markStoredRepairs(node);
-          if (!this.adaptive && this.subtreeNeedsAdaptation(node)) {
-            this.markPending(node);
-            this.enableAdaptive(node);
-          } else if (this.adaptive) {
-            this.markPending(node);
-            this.enqueue(node, true);
-          }
+          if (this.adaptive) this.enqueue(node);
         }
       }
     });
@@ -402,12 +385,7 @@ export class NightfallEngine {
   }
 
   private observeDocument(): void {
-    this.observer?.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ['class', 'style', 'hidden', 'open'],
-      childList: true,
-      subtree: true,
-    });
+    this.observer?.observe(document.documentElement, NIGHTFALL_OBSERVER_OPTIONS);
   }
 
   private enableAdaptive(root: Element): void {
@@ -455,48 +433,7 @@ export class NightfallEngine {
       if (observer && this.observer === observer) this.observeDocument();
     }
     this.status.processedNodes += count;
-    this.revealCompletedRoots();
     if (this.queue.length) this.scheduleBatch();
-  }
-
-  private markPending(element: Element): void {
-    if (!(element instanceof HTMLElement) || element.matches(MEDIA_SELECTOR)) return;
-    element.setAttribute(PENDING_ATTRIBUTE, '');
-    this.pendingRoots.add(element);
-  }
-
-  private revealCompletedRoots(): void {
-    for (const root of this.pendingRoots) {
-      if (this.queued.has(root)) continue;
-      let hasQueuedDescendant = false;
-      for (const descendant of root.querySelectorAll('*')) {
-        if (!this.queued.has(descendant)) continue;
-        hasQueuedDescendant = true;
-        break;
-      }
-      if (hasQueuedDescendant) continue;
-      root.removeAttribute(PENDING_ATTRIBUTE);
-      this.pendingRoots.delete(root);
-    }
-  }
-
-  private elementNeedsAdaptation(element: Element): boolean {
-    if (!(element instanceof HTMLElement) || element.matches(MEDIA_SELECTOR)) return false;
-    const style = getComputedStyle(element);
-    const background = parseRgb(style.backgroundColor);
-    return Boolean(
-      style.backgroundImage === 'none' &&
-      background &&
-      background.a > 0.65,
-    );
-  }
-
-  private subtreeNeedsAdaptation(element: Element): boolean {
-    if (this.elementNeedsAdaptation(element)) return true;
-    for (const child of element.querySelectorAll('*')) {
-      if (this.elementNeedsAdaptation(child)) return true;
-    }
-    return false;
   }
 
   private processElement(element: Element): void {
@@ -608,7 +545,7 @@ export class NightfallEngine {
     if (!this.settings) return;
     const repairs = repairsForPath(
       getSiteSettings(this.settings, this.hostname).repairs,
-      pagePath(location.href),
+      this.currentPath,
     );
     for (const repair of repairs) {
       try {

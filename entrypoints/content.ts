@@ -254,12 +254,11 @@ export default defineContentScript({
     };
     browser.storage.onChanged.addListener(storageListener);
 
-    const refresh = () => engine.refreshSoon();
+    const syncNavigation = () => engine.syncNavigation();
     const refreshRestoredPage = (event: PageTransitionEvent) => {
-      if (event.persisted) engine.refreshSoon();
+      if (event.persisted) engine.syncNavigation();
     };
-    window.addEventListener('popstate', refresh);
-    window.addEventListener('hashchange', refresh);
+    window.addEventListener('popstate', syncNavigation);
     window.addEventListener('pageshow', refreshRestoredPage);
 
     contentScope[CONTENT_INSTANCE_KEY] = {
@@ -267,8 +266,7 @@ export default defineContentScript({
       dispose() {
         browser.runtime.onMessage.removeListener(messageListener);
         browser.storage.onChanged.removeListener(storageListener);
-        window.removeEventListener('popstate', refresh);
-        window.removeEventListener('hashchange', refresh);
+        window.removeEventListener('popstate', syncNavigation);
         window.removeEventListener('pageshow', refreshRestoredPage);
         engine.stop();
         stopPicker?.();

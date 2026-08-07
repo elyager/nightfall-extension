@@ -217,7 +217,26 @@ try {
     background: getComputedStyle(document.documentElement).backgroundColor,
   }));
 
+  const processedBeforeAttributeChurn = await worker.evaluate(async (tabId) =>
+    (await chrome.tabs.sendMessage(tabId, { type: 'GET_STATUS' })).status.processedNodes,
+  fixtureTabId);
+  await page.bringToFront();
+  await page.evaluate(async () => {
+    const card = document.querySelector('.card');
+    for (let index = 0; index < 12; index += 1) {
+      card.classList.toggle('animated-state');
+      await new Promise(requestAnimationFrame);
+    }
+    card.classList.remove('animated-state');
+  });
+  await new Promise((resolveWait) => setTimeout(resolveWait, 100));
+  const attributeMutation = await worker.evaluate(async (tabId, before) => {
+    const response = await chrome.tabs.sendMessage(tabId, { type: 'GET_STATUS' });
+    return { reprocessedNodes: response.status.processedNodes - before };
+  }, fixtureTabId, processedBeforeAttributeChurn);
+
   await page.evaluate(() => {
+    document.querySelector('#nightfall-styles').dataset.navigationToken = 'preserved';
     history.pushState({}, '', '/menu/settings');
     document.querySelector('.card').classList.add('dark-route');
     const shell = document.createElement('div');
@@ -258,6 +277,10 @@ try {
     cardBackground: getComputedStyle(document.querySelector('.card')).backgroundColor,
     nestedBackground: getComputedStyle(document.querySelector('.route-panel')).backgroundColor,
     theme: document.documentElement.dataset.nightfallTheme,
+    stylePreserved:
+      document.querySelector('#nightfall-styles')?.dataset.navigationToken === 'preserved',
+    pendingRoots: document.querySelectorAll('[data-nightfall-pending]').length,
+    bodyOpacity: getComputedStyle(document.body).opacity,
   }));
 
   await page.evaluate(() => {
@@ -283,6 +306,7 @@ try {
     theme: document.documentElement.dataset.nightfallTheme,
   }));
 
+  await popup.bringToFront();
   await popup.click('[data-mode="github-dark"]');
   await page.waitForFunction(
     () => document.documentElement.dataset.nightfallTheme === 'github-dark',
@@ -479,6 +503,7 @@ try {
       transitionStartBackground: transitionStart.background,
       settledBackground: settledModeChange.background,
     },
+    attributeMutation,
     spaMutation,
     historyNavigation,
     githubModeChange,
@@ -506,9 +531,13 @@ try {
     transitionStart.background === 'rgb(255, 255, 255)' ||
     settledModeChange.theme !== 'linear-dark' ||
     settledModeChange.background !== 'rgb(16, 16, 16)' ||
+    attributeMutation.reprocessedNodes !== 0 ||
     spaMutation.theme !== 'linear-dark' ||
     spaMutation.cardBackground === 'rgb(8, 10, 14)' ||
     spaMutation.nestedBackground === 'rgb(247, 248, 250)' ||
+    !spaMutation.stylePreserved ||
+    spaMutation.pendingRoots !== 0 ||
+    spaMutation.bodyOpacity === '0' ||
     historyNavigation.path !== '/menu/settings' ||
     historyNavigation.hash !== '#details' ||
     historyNavigation.theme !== 'linear-dark' ||

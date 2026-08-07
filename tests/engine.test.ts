@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { createBaseCss, shouldPreserveForeground } from '../utils/engine';
+import {
+  createBaseCss,
+  NIGHTFALL_OBSERVER_OPTIONS,
+  shouldPreserveForeground,
+} from '../utils/engine';
 import { SLATE_BLUE } from '../utils/theme';
 
 describe('base theme styles', () => {
@@ -18,10 +22,16 @@ describe('base theme styles', () => {
     expect(css).toContain('background-color: var(--nightfall-element-bg) !important');
   });
 
-  it('conceals newly inserted subtrees until their adaptive pass finishes', () => {
+  it('keeps page content visible while adaptive work is queued', () => {
     const css = createBaseCss(SLATE_BLUE);
-    expect(css).toContain('[data-nightfall-pending]');
-    expect(css).toContain('opacity: 0 !important');
+    expect(css).not.toContain('data-nightfall-pending');
+  });
+
+  it('observes inserted content without tracking attribute churn', () => {
+    expect(NIGHTFALL_OBSERVER_OPTIONS).toEqual({
+      childList: true,
+      subtree: true,
+    });
   });
 
   it('preserves foreground colors when an image is reached before a solid surface', () => {
