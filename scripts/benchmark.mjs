@@ -501,7 +501,7 @@ try {
     pageMetrics.imageFilter !== 'none' ||
     pageMetrics.contrastViolations > 0 ||
     !pageMetrics.buttonUsable ||
-    popupMetrics.modeButtons !== 4 ||
+    popupMetrics.modeButtons !== 5 ||
     transitionStart.theme !== 'linear-dark' ||
     transitionStart.background === 'rgb(255, 255, 255)' ||
     settledModeChange.theme !== 'linear-dark' ||

@@ -6,6 +6,14 @@ import {
 } from '@/utils/messages';
 import { sitePermissionPattern } from '@/utils/permissions';
 import { getSiteSettings, loadSettings, saveSettings, updateSiteSettings } from '@/utils/settings';
+import {
+  createAiThemeRequest,
+  AI_LOGS_KEY,
+  OPENROUTER_ENDPOINT,
+  OPENROUTER_ORIGIN,
+  parseAiThemeResponse,
+  type AiLogEntry,
+} from '@/utils/ai-theme';
 
 export default defineBackground(() => {
   const scriptId = 'nightfall-engine';
@@ -21,6 +29,21 @@ export default defineBackground(() => {
     expiresAt: number;
   } | null = null;
 
+  const appendAiLog = async (entry: AiLogEntry): Promise<void> => {
+    console.info('[Nightfall AI]', entry);
+    try {
+      const stored = await browser.storage.local.get(AI_LOGS_KEY);
+      const current = Array.isArray(stored[AI_LOGS_KEY])
+        ? stored[AI_LOGS_KEY] as AiLogEntry[]
+        : [];
+      await browser.storage.local.set({
+        [AI_LOGS_KEY]: [entry, ...current].slice(0, 20),
+      });
+    } catch (error) {
+      console.warn('[Nightfall AI] Unable to persist response log', error);
+    }
+  };
+
   const syncRegisteredOrigins = async () => {
     const [permissions, settings] = await Promise.all([
       browser.permissions.getAll(),
@@ -28,6 +51,7 @@ export default defineBackground(() => {
     ]);
     const origins = (permissions.origins ?? [])
       .filter((origin) => origin.startsWith('http://') || origin.startsWith('https://'))
+      .filter((origin) => origin !== OPENROUTER_ORIGIN)
       .sort();
     const registrationIds = [scriptId, ...bootstrapScripts.map(({ id }) => id)];
     const existing = await browser.scripting.getRegisteredContentScripts({
@@ -101,8 +125,8 @@ export default defineBackground(() => {
     try {
       const response = (await browser.tabs.sendMessage(tabId, {
         type: 'GET_STATUS',
-      })) as ContentResponse;
-      return response.ok && response.protocolVersion === CONTENT_PROTOCOL_VERSION;
+      })) as ContentResponse | undefined;
+      return response?.ok === true && response.protocolVersion === CONTENT_PROTOCOL_VERSION;
     } catch {
       return false;
     }
@@ -178,6 +202,99 @@ export default defineBackground(() => {
       if (message?.type === 'DISARM_POPUP_REOPEN') {
         pendingPopupReopen = null;
         return;
+      }
+
+      if (message?.type === 'GENERATE_AI_THEME') {
+        const apiKey = message.apiKey.trim();
+        if (!apiKey || apiKey.length > 512) {
+          sendResponse({ ok: false, error: 'Enter a valid OpenRouter API key' } satisfies BackgroundResponse);
+          return;
+        }
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 75_000);
+        void (async () => {
+          let httpStatus = 0;
+          let responseText = '';
+          let failure = '';
+          let attempt = 1;
+          try {
+            for (attempt = 1; attempt <= 2; attempt += 1) {
+              const response = await fetch(OPENROUTER_ENDPOINT, {
+                method: 'POST',
+                headers: {
+                  Authorization: `Bearer ${apiKey}`,
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(createAiThemeRequest(
+                  message.snapshot,
+                  message.requireZdr,
+                  attempt === 1 ? 1_800 : 3_200,
+                )),
+                signal: controller.signal,
+              });
+              httpStatus = response.status;
+              responseText = (await response.text()).slice(0, 40_000);
+              let result: unknown;
+              try { result = JSON.parse(responseText); } catch { result = undefined; }
+              if (!response.ok) {
+                const apiError = result && typeof result === 'object' && 'error' in result
+                  ? (result as { error?: { message?: unknown } }).error?.message
+                  : undefined;
+                throw new Error(typeof apiError === 'string' ? apiError : `OpenRouter request failed (${response.status})`);
+              }
+              const choice = result && typeof result === 'object' && 'choices' in result
+                ? (result as { choices?: Array<{ finish_reason?: unknown; message?: { content?: unknown } }> }).choices?.[0]
+                : undefined;
+              const truncated = choice?.finish_reason === 'length' || typeof choice?.message?.content !== 'string';
+              if (truncated && attempt === 1) {
+                await appendAiLog({
+                  id: crypto.randomUUID(),
+                  timestamp: new Date().toISOString(),
+                  httpStatus,
+                  requireZdr: message.requireZdr,
+                  ok: false,
+                  attempt,
+                  responseText,
+                  error: 'The model exhausted its output budget before returning JSON. Retrying automatically with a larger budget.',
+                });
+                continue;
+              }
+              if (truncated) {
+                throw new Error('OpenRouter exhausted the output budget twice without returning the theme JSON');
+              }
+              const theme = parseAiThemeResponse(result);
+              await appendAiLog({
+                id: crypto.randomUUID(),
+                timestamp: new Date().toISOString(),
+                httpStatus,
+                requireZdr: message.requireZdr,
+                ok: true,
+                attempt,
+                responseText,
+              });
+              sendResponse({ ok: true, theme } satisfies BackgroundResponse);
+              return;
+            }
+          } catch (error: unknown) {
+            failure = error instanceof Error && error.name === 'AbortError'
+              ? 'OpenRouter timed out. Try again.'
+              : error instanceof Error ? error.message : 'Unable to generate the AI theme';
+            await appendAiLog({
+              id: crypto.randomUUID(),
+              timestamp: new Date().toISOString(),
+              httpStatus,
+              requireZdr: message.requireZdr,
+              ok: false,
+              attempt,
+              responseText,
+              error: failure,
+            });
+            sendResponse({ ok: false, error: failure } satisfies BackgroundResponse);
+          } finally {
+            clearTimeout(timeout);
+          }
+        })();
+        return true;
       }
 
       if (message?.type !== 'ENSURE_CONTENT_SCRIPT') return;

@@ -1,4 +1,4 @@
-export type ThemePreset = 'original' | 'slate-blue' | 'linear-dark' | 'github-dark';
+export type ThemePreset = 'original' | 'slate-blue' | 'linear-dark' | 'github-dark' | 'ai';
 export type SurfaceLevel =
   | 'page'
   | 'surface'
@@ -123,13 +123,17 @@ export const GITHUB_DARK: ThemePalette = {
   neutralBlend: 0.82,
 };
 
-export const themePresets: Record<ThemePreset, ThemePalette> = {
+export const themePresets: Record<Exclude<ThemePreset, 'ai'>, ThemePalette> = {
   original: SLATE_BLUE,
   'slate-blue': SLATE_BLUE,
   'linear-dark': LINEAR_DARK,
   'github-dark': GITHUB_DARK,
 };
 
-export function getThemePreset(theme: ThemePreset): ThemePalette {
+export function getThemePreset(
+  theme: ThemePreset,
+  generated?: ThemePalette,
+): ThemePalette {
+  if (theme === 'ai') return generated ?? SLATE_BLUE;
   return themePresets[theme];
 }

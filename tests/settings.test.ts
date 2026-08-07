@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { getSiteSettings, normalizeSettings } from '../utils/settings';
+import { getSiteSettings, normalizeAiTheme, normalizeSettings } from '../utils/settings';
+import { SLATE_BLUE } from '../utils/theme';
 
 describe('settings', () => {
   it('uses Original as the active default', () => {
@@ -26,6 +27,15 @@ describe('settings', () => {
     expect(normalizeSettings({ mode: 'slate-blue' }).mode).toBe('slate-blue');
     expect(normalizeSettings({ mode: 'linear-dark' }).mode).toBe('linear-dark');
     expect(normalizeSettings({ mode: 'github-dark' }).mode).toBe('github-dark');
+    expect(normalizeSettings({ mode: 'ai' }).mode).toBe('ai');
+  });
+
+  it('accepts only constrained AI palette values', () => {
+    const valid = normalizeAiTheme({ ...SLATE_BLUE, id: 'ai', neutralBlend: 2 });
+    expect(valid).toMatchObject({ id: 'ai', label: 'AI', neutralBlend: 0.95 });
+    expect(normalizeAiTheme({ ...SLATE_BLUE, pageBackground: 'red; color: white' })).toBeUndefined();
+    expect(normalizeAiTheme({ ...SLATE_BLUE, shadow: 'url(https://example.com)' })).toBeUndefined();
+    expect(normalizeAiTheme({ ...SLATE_BLUE, textPrimary: '#10141B' })).toBeUndefined();
   });
 
   it('starts each site on its untouched Original appearance', () => {

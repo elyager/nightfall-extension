@@ -212,6 +212,19 @@ export default defineContentScript({
           } satisfies ContentResponse);
           return;
         }
+        if (message.type === 'GET_PAGE_STYLE_SNAPSHOT') {
+          void engine.collectOriginalPageStyleSnapshot()
+            .then((snapshot) => sendResponse({
+              ok: true,
+              protocolVersion: CONTENT_PROTOCOL_VERSION,
+              snapshot,
+            } satisfies ContentResponse))
+            .catch((error: unknown) => sendResponse({
+              ok: false,
+              error: error instanceof Error ? error.message : 'Unable to inspect page styles',
+            } satisfies ContentResponse));
+          return true;
+        }
         void applySettings(message.settings)
           .then(() =>
             sendResponse({

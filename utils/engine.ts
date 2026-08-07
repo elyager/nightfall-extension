@@ -22,6 +22,7 @@ import {
 } from './theme';
 import { detectNativeDark } from './native-dark';
 import { pagePath, repairsForPath } from './repairs';
+import { collectPageStyleSnapshot, type PageStyleSnapshot } from './ai-theme';
 
 const BOOTSTRAP_ID = 'nightfall-bootstrap';
 const STYLE_ID = 'nightfall-styles';
@@ -267,7 +268,7 @@ export class NightfallEngine {
     }
 
     removeBootstrap();
-    this.palette = getThemePreset(this.mode);
+    this.palette = getThemePreset(this.mode, site.aiTheme);
     if (userInitiated && switchingPalette) this.enableTransition();
     this.installStyles();
     document.documentElement.dataset.nightfall = 'active';
@@ -319,6 +320,18 @@ export class NightfallEngine {
 
   getStatus(): PerformanceStatus {
     return { ...this.status };
+  }
+
+  async collectOriginalPageStyleSnapshot(): Promise<PageStyleSnapshot> {
+    const wasActive = document.documentElement.dataset.nightfall === 'active';
+    if (!wasActive) return collectPageStyleSnapshot();
+    this.stop(false);
+    await nextFrame();
+    try {
+      return collectPageStyleSnapshot();
+    } finally {
+      await this.start(this.settings);
+    }
   }
 
   refreshSoon(): void {

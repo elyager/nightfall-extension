@@ -1,5 +1,12 @@
 import './style.css';
 import { createSerialTaskQueue } from '@/utils/async-queue';
+import {
+  AI_CREDENTIALS_KEY,
+  AI_LOGS_KEY,
+  OPENROUTER_ORIGIN,
+  type AiLogEntry,
+  type PageStyleSnapshot,
+} from '@/utils/ai-theme';
 import type {
   BackgroundMessage,
   BackgroundResponse,
@@ -25,6 +32,12 @@ let tabId: number | undefined;
 let hostname = '';
 let currentUrl = '';
 let hasAccess = false;
+let openRouterApiKey = '';
+let aiGenerating = false;
+let aiError = '';
+let aiSetupOpen = false;
+let requireZeroDataRetention = true;
+let aiLogs: AiLogEntry[] = [];
 let persistRevision = 0;
 const enqueuePersist = createSerialTaskQueue();
 
@@ -35,7 +48,38 @@ const modeOptions: Array<{ mode: Mode; label: string; title: string }> = [
   { mode: 'slate-blue', label: 'Slate', title: 'Cooler colors for app-like interfaces' },
   { mode: 'linear-dark', label: 'Linear', title: 'Deep neutral blacks with cyan-blue accents' },
   { mode: 'github-dark', label: 'GitHub', title: 'Crisp charcoal surfaces with blue accents' },
+  { mode: 'ai', label: 'AI', title: 'Generate a private, site-aware dark palette with OpenRouter' },
 ];
+
+async function loadAiCredentials(): Promise<void> {
+  const stored = await browser.storage.local.get(AI_CREDENTIALS_KEY);
+  const value = stored[AI_CREDENTIALS_KEY] as { openRouterApiKey?: unknown } | undefined;
+  openRouterApiKey = typeof value?.openRouterApiKey === 'string' ? value.openRouterApiKey : '';
+}
+
+async function saveAiCredentials(apiKey: string): Promise<void> {
+  openRouterApiKey = apiKey.trim();
+  await browser.storage.local.set({
+    [AI_CREDENTIALS_KEY]: { openRouterApiKey },
+  });
+}
+
+async function forgetAiCredentials(): Promise<void> {
+  openRouterApiKey = '';
+  await browser.storage.local.remove(AI_CREDENTIALS_KEY);
+}
+
+async function loadAiLogs(): Promise<void> {
+  const stored = await browser.storage.local.get(AI_LOGS_KEY);
+  aiLogs = Array.isArray(stored[AI_LOGS_KEY])
+    ? (stored[AI_LOGS_KEY] as AiLogEntry[]).slice(0, 20)
+    : [];
+}
+
+async function clearAiLogs(): Promise<void> {
+  aiLogs = [];
+  await browser.storage.local.remove(AI_LOGS_KEY);
+}
 
 async function getActiveTab() {
   const requestedTab = Number(new URLSearchParams(location.search).get('tab'));
@@ -65,8 +109,8 @@ async function getStatus(): Promise<PerformanceStatus | null> {
   try {
     const response = (await browser.tabs.sendMessage(tabId, {
       type: 'GET_STATUS',
-    })) as ContentResponse;
-    return response.ok && 'status' in response ? response.status : null;
+    })) as ContentResponse | undefined;
+    return response?.ok && 'status' in response ? response.status : null;
   } catch {
     return null;
   }
@@ -78,8 +122,8 @@ async function ensureContentScript(): Promise<boolean> {
     const response = (await browser.runtime.sendMessage({
       type: 'ENSURE_CONTENT_SCRIPT',
       tabId,
-    })) as BackgroundResponse;
-    return response.ok;
+    })) as BackgroundResponse | undefined;
+    return response?.ok === true;
   } catch {
     return false;
   }
@@ -105,8 +149,8 @@ async function applyToPage(next: NightfallSettings): Promise<PerformanceStatus |
     const response = (await browser.tabs.sendMessage(tabId, {
       type: 'APPLY_SETTINGS',
       settings: next,
-    })) as ContentResponse;
-    return response.ok && 'status' in response ? response.status : null;
+    })) as ContentResponse | undefined;
+    return response?.ok && 'status' in response ? response.status : null;
   } catch {
     return null;
   }
@@ -135,6 +179,8 @@ function render(status: PerformanceStatus | null) {
     : getSiteSettings(settings, '');
   const selectedMode = siteSettings.mode;
   const pageRepairs = repairsForPath(siteSettings.repairs, pagePath(currentUrl));
+  const hasAiTheme = Boolean(siteSettings.aiTheme);
+  const showAiSetup = selectedMode === 'ai' || aiSetupOpen;
   const modeButtons = modeOptions
     .map(
       ({ mode, label, title }) => {
@@ -160,6 +206,42 @@ function render(status: PerformanceStatus | null) {
     </header>
 
     ${hasAccess ? `<section class="mode" aria-label="Page appearance">${modeButtons}</section>` : ''}
+
+    ${hasAccess && showAiSetup ? `
+      <section class="ai-theme" aria-label="AI-generated appearance">
+        <div class="ai-heading">
+          <div><strong>AI theme</strong><small>${hasAiTheme ? 'Generated palette saved for this site' : 'Uses aggregate styling only'}</small></div>
+          ${openRouterApiKey ? '<button class="regenerate-ai" id="forget-ai-key">Forget key</button>' : ''}
+        </div>
+        ${openRouterApiKey ? `
+          <div class="saved-key"><span aria-hidden="true">✓</span><div><strong>API key saved</strong><small>Stored in Nightfall's extension-only browser storage</small></div></div>
+        ` : `
+          <label class="api-key-label" for="openrouter-key">OpenRouter API key</label>
+          <input id="openrouter-key" type="password" autocomplete="off" spellcheck="false" placeholder="sk-or-v1-…" aria-describedby="ai-privacy" />
+        `}
+        <p id="ai-privacy">When you generate, Nightfall sends colors, fonts, spacing, layout counts, and semantic element counts—never page text, URLs, selectors, IDs, classes, form values, cookies, or storage.</p>
+        <label class="zdr-option">
+          <input id="require-zdr" type="checkbox" ${requireZeroDataRetention ? 'checked' : ''} />
+          <span><strong>Require zero-data retention</strong><small>Turn this off only if no free ZDR provider is available.</small></span>
+        </label>
+        <button class="generate-ai" id="generate-ai" ${aiGenerating ? 'disabled' : ''}>${aiGenerating ? 'Generating…' : hasAiTheme ? 'Generate again' : 'Generate and apply'}</button>
+        ${aiError ? `<p class="ai-error" role="alert">${escapeHtml(aiError)}</p>` : ''}
+        ${aiLogs.length ? `
+          <details class="ai-logs">
+            <summary>OpenRouter logs (${aiLogs.length})</summary>
+            <div class="ai-log-toolbar"><small>Stored locally · API key and request payload excluded</small><button id="clear-ai-logs">Clear</button></div>
+            ${aiLogs.map((entry) => `
+              <article class="ai-log-entry ${entry.ok ? 'is-success' : 'is-error'}">
+                <header><strong>${entry.ok ? 'Success' : 'Error'} · HTTP ${entry.httpStatus || 'network'}</strong><time>${escapeHtml(new Date(entry.timestamp).toLocaleString())}</time></header>
+                <small>Attempt ${entry.attempt ?? 1} · ZDR ${entry.requireZdr ? 'required' : 'not required'}</small>
+                ${entry.error ? `<p>${escapeHtml(entry.error)}</p>` : ''}
+                <pre>${escapeHtml(entry.responseText || '(empty response body)')}</pre>
+              </article>
+            `).join('')}
+          </details>
+        ` : ''}
+      </section>
+    ` : ''}
 
     ${hasAccess ? `
       <section class="element-fixes" aria-label="Element fixes">
@@ -192,22 +274,105 @@ function render(status: PerformanceStatus | null) {
       </section>
     ` : ''}
 
-    <footer>No tracking · No account · Settings stay on this device</footer>
+    <footer>No tracking · API key and generated themes stay on this device</footer>
   `;
 
   bindEvents();
+}
+
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/g, (character) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  })[character]!);
+}
+
+async function generateAiTheme(): Promise<void> {
+  if (!tabId || !hostname || aiGenerating) return;
+  const input = app.querySelector<HTMLInputElement>('#openrouter-key');
+  const apiKey = input?.value.trim() || openRouterApiKey;
+  if (!apiKey) {
+    aiError = 'Enter your OpenRouter API key first.';
+    render(await getStatus());
+    return;
+  }
+  aiGenerating = true;
+  aiError = '';
+  openRouterApiKey = apiKey;
+  render(null);
+  try {
+    const apiPermission = await browser.permissions.request({ origins: [OPENROUTER_ORIGIN] });
+    if (!apiPermission) throw new Error('OpenRouter access was not allowed.');
+    await saveAiCredentials(apiKey);
+    if (!(await ensureContentScript())) throw new Error('Nightfall could not inspect this page.');
+    let snapshotResponse: ContentResponse | undefined;
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      snapshotResponse = (await browser.tabs.sendMessage(tabId, {
+        type: 'GET_PAGE_STYLE_SNAPSHOT',
+      }).catch(() => undefined)) as ContentResponse | undefined;
+      if (snapshotResponse?.ok && 'snapshot' in snapshotResponse) break;
+      await ensureContentScript();
+    }
+    if (!snapshotResponse?.ok || !('snapshot' in snapshotResponse)) {
+      throw new Error('Nightfall received no page-style response. Reload the page and try again.');
+    }
+    const response = (await browser.runtime.sendMessage({
+      type: 'GENERATE_AI_THEME',
+      apiKey,
+      snapshot: snapshotResponse.snapshot satisfies PageStyleSnapshot,
+      requireZdr: requireZeroDataRetention,
+    } satisfies BackgroundMessage)) as BackgroundResponse | undefined;
+    if (!response) {
+      throw new Error('Nightfall received no background response. Reopen the extension and try again.');
+    }
+    if (!response.ok || !response.theme) throw new Error(response.ok ? 'No theme was returned.' : response.error);
+    const next = updateSiteSettings(settings, hostname, {
+      mode: 'ai',
+      aiTheme: response.theme,
+    });
+    await persist({ ...next, mode: 'ai' });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unable to generate the AI theme.';
+    aiError = requireZeroDataRetention && /no endpoints found matching your data policy/i.test(message)
+      ? 'No free zero-data-retention provider is currently available. Configure OpenRouter privacy, or turn off the ZDR requirement below and retry.'
+      : message;
+  } finally {
+    aiGenerating = false;
+    await loadAiLogs();
+    render(await getStatus());
+  }
 }
 
 function bindEvents() {
   app.querySelectorAll<HTMLButtonElement>('[data-mode]').forEach((button) => {
     button.addEventListener('click', () => {
       const mode = button.dataset.mode as Mode;
+      if (mode === 'ai' && !getSiteSettings(settings, hostname).aiTheme) {
+        aiSetupOpen = true;
+        render(null);
+        app.querySelector<HTMLInputElement>('#openrouter-key')?.focus();
+        return;
+      }
       if (!hostname || mode === getSiteSettings(settings, hostname).mode) return;
       void persist({
         ...updateSiteSettings(settings, hostname, { mode }),
         mode,
       });
     });
+  });
+
+  app.querySelector<HTMLButtonElement>('#generate-ai')?.addEventListener('click', () => {
+    void generateAiTheme();
+  });
+  app.querySelector<HTMLInputElement>('#require-zdr')?.addEventListener('change', (event) => {
+    requireZeroDataRetention = (event.currentTarget as HTMLInputElement).checked;
+    aiError = '';
+  });
+  app.querySelector<HTMLButtonElement>('#forget-ai-key')?.addEventListener('click', () => {
+    void forgetAiCredentials().then(() => render(null));
+  });
+  app.querySelector<HTMLButtonElement>('#clear-ai-logs')?.addEventListener('click', (event) => {
+    event.preventDefault();
+    void clearAiLogs().then(() => render(null));
   });
 
   app.querySelector<HTMLButtonElement>('#grant-access')?.addEventListener('click', async () => {
@@ -241,8 +406,8 @@ function bindEvents() {
     try {
       const response = (await browser.tabs.sendMessage(tabId, {
         type: 'START_ELEMENT_PICKER',
-      })) as ContentResponse;
-      if (response.ok) window.close();
+      })) as ContentResponse | undefined;
+      if (response?.ok) window.close();
     } catch {
       await refreshStatus();
     }
@@ -265,7 +430,12 @@ async function refreshStatus() {
 
 async function init() {
   try {
-    [settings] = await Promise.all([loadSettings(), getActiveTab()]);
+    [settings] = await Promise.all([
+      loadSettings(),
+      getActiveTab(),
+      loadAiCredentials(),
+      loadAiLogs(),
+    ]);
 
     // Paint the popup before optional page messaging or action cleanup. Those
     // APIs can reject on restricted pages or while a dev build is reloading.
