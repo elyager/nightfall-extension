@@ -2,9 +2,11 @@ import { describe, expect, it } from 'vitest';
 import {
   createBaseCss,
   NIGHTFALL_OBSERVER_OPTIONS,
+  shouldPreserveAccentBackground,
   shouldPreserveForeground,
 } from '../utils/engine';
-import { SLATE_BLUE } from '../utils/theme';
+import { contrastRatio, parseHex } from '../utils/color';
+import { GITHUB_DARK, LINEAR_DARK, SLATE_BLUE } from '../utils/theme';
 
 describe('base theme styles', () => {
   it('themes hidden dropdown surfaces before they become visible', () => {
@@ -14,6 +16,34 @@ describe('base theme styles', () => {
     expect(css).toContain(`background-color: ${SLATE_BLUE.elevatedSurface} !important`);
     expect(css).toContain('html[data-nightfall="active"] .dropdown-item:hover');
     expect(css).toContain(`background-color: ${SLATE_BLUE.controlHover} !important`);
+  });
+
+  it('keeps nested menu labels readable on hover and keyboard focus', () => {
+    const css = createBaseCss(SLATE_BLUE);
+
+    expect(css).toContain('[role="menuitem"]:hover :not(.nightfall-image-backed-text)');
+    expect(css).toContain('.dropdown-item:focus :not(.nightfall-image-backed-text)');
+    expect(css).toContain(`-webkit-text-fill-color: ${SLATE_BLUE.textPrimary} !important`);
+  });
+
+  it('gives hover surfaces and their text a clearly distinct accessible palette', () => {
+    for (const palette of [SLATE_BLUE, LINEAR_DARK, GITHUB_DARK]) {
+      expect(contrastRatio(parseHex(palette.controlHover), parseHex(palette.controlBackground)))
+        .toBeGreaterThanOrEqual(1.5);
+      expect(contrastRatio(parseHex(palette.controlHover), parseHex(palette.elevatedSurface)))
+        .toBeGreaterThanOrEqual(1.5);
+      expect(contrastRatio(parseHex(palette.textPrimary), parseHex(palette.controlHover)))
+        .toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
+  it('applies the stronger hover treatment to neutral controls and nested labels', () => {
+    const css = createBaseCss(SLATE_BLUE);
+
+    expect(css).toContain('button:not(.nightfall-accent-background):not(.nightfall-image-backed-text):hover');
+    expect(css).toContain('[role="tab"]:not(.nightfall-accent-background):not(.nightfall-image-backed-text):hover');
+    expect(css).toContain('[role="option"]:not(.nightfall-accent-background):hover :not(.nightfall-image-backed-text)');
+    expect(css).toContain('summary:not(.nightfall-accent-background):focus-visible');
   });
 
   it('includes persistent element repair overrides', () => {
@@ -71,7 +101,39 @@ describe('base theme styles', () => {
   it('excludes image-backed links and controls from broad foreground rules', () => {
     const css = createBaseCss(SLATE_BLUE);
     expect(css).toContain('a:not(.nightfall-image-backed-text)');
-    expect(css).toContain('button:not(.nightfall-image-backed-text)');
+    expect(css).not.toContain('button:not(.nightfall-image-backed-text)');
     expect(css).toContain('.nightfall-adapted-foreground:not(.nightfall-image-backed-text)');
+  });
+
+  it('does not flatten authored button backgrounds in the base stylesheet', () => {
+    const css = createBaseCss(SLATE_BLUE);
+
+    expect(css).not.toContain('html[data-nightfall="active"] button {');
+    expect(css).not.toContain('html[data-nightfall="active"] button:hover');
+    expect(css).not.toContain('html[data-nightfall="active"] button:active');
+  });
+
+  it('preserves distinctive colors on controls and information capsules', () => {
+    const accent = { r: 20, g: 115, b: 230, a: 1 };
+
+    expect(shouldPreserveAccentBackground(accent, {
+      interactive: true,
+      badgeLike: false,
+    })).toBe(true);
+    expect(shouldPreserveAccentBackground(accent, {
+      interactive: false,
+      badgeLike: true,
+    })).toBe(true);
+  });
+
+  it('continues adapting neutral controls and non-semantic colored surfaces', () => {
+    expect(shouldPreserveAccentBackground(
+      { r: 42, g: 46, b: 52, a: 1 },
+      { interactive: true, badgeLike: false },
+    )).toBe(false);
+    expect(shouldPreserveAccentBackground(
+      { r: 20, g: 115, b: 230, a: 1 },
+      { interactive: false, badgeLike: false },
+    )).toBe(false);
   });
 });

@@ -15,6 +15,13 @@ import {
   type AiLogEntry,
 } from '@/utils/ai-theme';
 
+declare const __DEV_SERVER_ORIGIN__: string;
+
+interface DevServerMessage {
+  type?: string;
+  event?: string;
+}
+
 export default defineBackground(() => {
   const scriptId = 'nightfall-engine';
   const bootstrapScripts = [
@@ -146,6 +153,35 @@ export default defineBackground(() => {
       files: ['/content-scripts/content.js'],
     });
   };
+
+  const reloadActiveTabContentScript = async () => {
+    await scheduleRegistrationSync();
+    const [tab] = await browser.tabs.query({ active: true, lastFocusedWindow: true });
+    if (tab?.id == null) return;
+    const pattern = sitePermissionPattern(tab.url ?? '');
+    if (!pattern) return;
+    const hasAccess = await browser.permissions.contains({ origins: [pattern] });
+    if (!hasAccess) return;
+    await browser.scripting.executeScript({
+      target: { tabId: tab.id, allFrames: true },
+      files: ['/content-scripts/content.js'],
+    });
+  };
+
+  if (import.meta.env.COMMAND === 'serve') {
+    const devServer = new WebSocket(__DEV_SERVER_ORIGIN__, 'vite-hmr');
+    devServer.addEventListener('message', (event) => {
+      try {
+        const message = JSON.parse(String(event.data)) as DevServerMessage;
+        if (message.type !== 'custom' || message.event !== 'nightfall:reload-active-tab') return;
+        void reloadActiveTabContentScript().catch((error: unknown) => {
+          console.warn('[Nightfall] Unable to refresh the active tab', error);
+        });
+      } catch {
+        // Ignore unrelated Vite dev-server messages.
+      }
+    });
+  }
 
   void scheduleRegistrationSync().catch(() => undefined);
   browser.runtime.onInstalled.addListener(() => {

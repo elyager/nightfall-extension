@@ -34,6 +34,7 @@ export default defineContentScript({
     };
     const existingInstance = contentScope[CONTENT_INSTANCE_KEY];
     if (
+      import.meta.env.COMMAND !== 'serve' &&
       typeof existingInstance === 'object' &&
       existingInstance.protocolVersion === CONTENT_PROTOCOL_VERSION
     ) {

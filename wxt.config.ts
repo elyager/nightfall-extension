@@ -2,6 +2,12 @@ import { defineConfig } from 'wxt';
 
 export default defineConfig({
   targetBrowsers: ['chrome'],
+  dev: {
+    server: {
+      port: 3000,
+      strictPort: true,
+    },
+  },
   vite: () => ({
     server: {
       // Extension pages load Vite's dev client from localhost during development.
@@ -25,6 +31,14 @@ export default defineConfig({
     },
   },
   hooks: {
+    'server:created': (_wxt, server) => {
+      // WXT's default content-script refresh reloads every matching browser tab.
+      // Nightfall has a disposable content-script instance, so let the background
+      // worker replace it in-place on the active tab instead.
+      server.reloadContentScript = () => {
+        server.ws.send('nightfall:reload-active-tab');
+      };
+    },
     'build:manifestGenerated': (_wxt, manifest) => {
       // Runtime content scripts normally promote their matches to required host
       // access. Nightfall requests and registers each origin only when asked.

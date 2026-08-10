@@ -34,6 +34,7 @@ const IMAGE_BRIGHTNESS_CLASS = 'nightfall-image-brightened';
 const ADAPTED_BACKGROUND_CLASS = 'nightfall-adapted-background';
 const ADAPTED_FOREGROUND_CLASS = 'nightfall-adapted-foreground';
 const ADAPTED_BORDER_CLASS = 'nightfall-adapted-border';
+const ACCENT_BACKGROUND_CLASS = 'nightfall-accent-background';
 
 export const NIGHTFALL_OBSERVER_OPTIONS: MutationObserverInit = {
   childList: true,
@@ -45,12 +46,32 @@ interface BackgroundLayer {
   color: Rgb | null;
 }
 
+interface AccentBackgroundContext {
+  interactive: boolean;
+  badgeLike: boolean;
+}
+
 export function shouldPreserveForeground(layers: BackgroundLayer[]): boolean {
   for (const layer of layers) {
     if (layer.image !== 'none') return true;
     if (layer.color && layer.color.a > 0.65) return false;
   }
   return false;
+}
+
+export function shouldPreserveAccentBackground(
+  color: Rgb | null,
+  context: AccentBackgroundContext,
+): boolean {
+  if (!color || color.a <= 0.65 || (!context.interactive && !context.badgeLike)) {
+    return false;
+  }
+
+  const strongestChannel = Math.max(color.r, color.g, color.b);
+  const weakestChannel = Math.min(color.r, color.g, color.b);
+  const chroma = strongestChannel - weakestChannel;
+  const saturation = chroma / Math.max(strongestChannel, 1);
+  return chroma >= 36 && saturation >= 0.28;
 }
 
 export function createBaseCss(
@@ -69,33 +90,33 @@ html[data-nightfall="active"] body {
 }
 html[data-nightfall="active"] input,
 html[data-nightfall="active"] textarea,
-html[data-nightfall="active"] select,
-html[data-nightfall="active"] button {
+html[data-nightfall="active"] select {
   background-color: ${palette.controlBackground} !important;
   border-color: ${palette.border} !important;
 }
 html[data-nightfall="active"] input:not(.${IMAGE_BACKED_TEXT_CLASS}),
 html[data-nightfall="active"] textarea:not(.${IMAGE_BACKED_TEXT_CLASS}),
-html[data-nightfall="active"] select:not(.${IMAGE_BACKED_TEXT_CLASS}),
-html[data-nightfall="active"] button:not(.${IMAGE_BACKED_TEXT_CLASS}) {
+html[data-nightfall="active"] select:not(.${IMAGE_BACKED_TEXT_CLASS}) {
   color: ${palette.textPrimary} !important;
 }
 html[data-nightfall="active"] input:hover,
 html[data-nightfall="active"] textarea:hover,
-html[data-nightfall="active"] select:hover,
-html[data-nightfall="active"] button:hover {
+html[data-nightfall="active"] select:hover {
   background-color: ${palette.controlHover} !important;
 }
-html[data-nightfall="active"] button:active,
-html[data-nightfall="active"] [aria-pressed="true"] {
+html[data-nightfall="active"] input:active,
+html[data-nightfall="active"] textarea:active,
+html[data-nightfall="active"] select:active {
   background-color: ${palette.controlActive} !important;
 }
-html[data-nightfall="active"] :disabled,
-html[data-nightfall="active"] [aria-disabled="true"] {
+html[data-nightfall="active"] input:disabled,
+html[data-nightfall="active"] textarea:disabled,
+html[data-nightfall="active"] select:disabled {
   background-color: ${palette.controlDisabled} !important;
 }
-html[data-nightfall="active"] :disabled:not(.${IMAGE_BACKED_TEXT_CLASS}),
-html[data-nightfall="active"] [aria-disabled="true"]:not(.${IMAGE_BACKED_TEXT_CLASS}) {
+html[data-nightfall="active"] input:disabled:not(.${IMAGE_BACKED_TEXT_CLASS}),
+html[data-nightfall="active"] textarea:disabled:not(.${IMAGE_BACKED_TEXT_CLASS}),
+html[data-nightfall="active"] select:disabled:not(.${IMAGE_BACKED_TEXT_CLASS}) {
   color: ${palette.textDisabled} !important;
 }
 html[data-nightfall="active"] :focus-visible {
@@ -142,7 +163,48 @@ html[data-nightfall="active"] .submenu > li > a:hover,
 html[data-nightfall="active"] .submenu > li > a:focus {
   background-color: ${palette.controlHover} !important;
   color: ${palette.textPrimary} !important;
+  -webkit-text-fill-color: ${palette.textPrimary} !important;
   text-decoration: none;
+}
+html[data-nightfall="active"] button:not(.${ACCENT_BACKGROUND_CLASS}):not(.${IMAGE_BACKED_TEXT_CLASS}):hover,
+html[data-nightfall="active"] button:not(.${ACCENT_BACKGROUND_CLASS}):not(.${IMAGE_BACKED_TEXT_CLASS}):focus-visible,
+html[data-nightfall="active"] [role="button"]:not(.${ACCENT_BACKGROUND_CLASS}):not(.${IMAGE_BACKED_TEXT_CLASS}):hover,
+html[data-nightfall="active"] [role="button"]:not(.${ACCENT_BACKGROUND_CLASS}):not(.${IMAGE_BACKED_TEXT_CLASS}):focus-visible,
+html[data-nightfall="active"] [role="tab"]:not(.${ACCENT_BACKGROUND_CLASS}):not(.${IMAGE_BACKED_TEXT_CLASS}):hover,
+html[data-nightfall="active"] [role="tab"]:not(.${ACCENT_BACKGROUND_CLASS}):not(.${IMAGE_BACKED_TEXT_CLASS}):focus-visible,
+html[data-nightfall="active"] [role="option"]:not(.${ACCENT_BACKGROUND_CLASS}):not(.${IMAGE_BACKED_TEXT_CLASS}):hover,
+html[data-nightfall="active"] [role="option"]:not(.${ACCENT_BACKGROUND_CLASS}):not(.${IMAGE_BACKED_TEXT_CLASS}):focus-visible,
+html[data-nightfall="active"] [role="treeitem"]:not(.${ACCENT_BACKGROUND_CLASS}):not(.${IMAGE_BACKED_TEXT_CLASS}):hover,
+html[data-nightfall="active"] [role="treeitem"]:not(.${ACCENT_BACKGROUND_CLASS}):not(.${IMAGE_BACKED_TEXT_CLASS}):focus-visible,
+html[data-nightfall="active"] summary:not(.${ACCENT_BACKGROUND_CLASS}):not(.${IMAGE_BACKED_TEXT_CLASS}):hover,
+html[data-nightfall="active"] summary:not(.${ACCENT_BACKGROUND_CLASS}):not(.${IMAGE_BACKED_TEXT_CLASS}):focus-visible {
+  background-color: ${palette.controlHover} !important;
+  border-color: ${palette.border} !important;
+  color: ${palette.textPrimary} !important;
+  -webkit-text-fill-color: ${palette.textPrimary} !important;
+}
+html[data-nightfall="active"] [role="menuitem"]:hover :not(.${IMAGE_BACKED_TEXT_CLASS}),
+html[data-nightfall="active"] [role="menuitem"]:focus :not(.${IMAGE_BACKED_TEXT_CLASS}),
+html[data-nightfall="active"] .dropdown-item:hover :not(.${IMAGE_BACKED_TEXT_CLASS}),
+html[data-nightfall="active"] .dropdown-item:focus :not(.${IMAGE_BACKED_TEXT_CLASS}),
+html[data-nightfall="active"] .sub-menu > li > a:hover :not(.${IMAGE_BACKED_TEXT_CLASS}),
+html[data-nightfall="active"] .sub-menu > li > a:focus :not(.${IMAGE_BACKED_TEXT_CLASS}),
+html[data-nightfall="active"] .submenu > li > a:hover :not(.${IMAGE_BACKED_TEXT_CLASS}),
+html[data-nightfall="active"] .submenu > li > a:focus :not(.${IMAGE_BACKED_TEXT_CLASS}),
+html[data-nightfall="active"] button:not(.${ACCENT_BACKGROUND_CLASS}):hover :not(.${IMAGE_BACKED_TEXT_CLASS}),
+html[data-nightfall="active"] button:not(.${ACCENT_BACKGROUND_CLASS}):focus-visible :not(.${IMAGE_BACKED_TEXT_CLASS}),
+html[data-nightfall="active"] [role="button"]:not(.${ACCENT_BACKGROUND_CLASS}):hover :not(.${IMAGE_BACKED_TEXT_CLASS}),
+html[data-nightfall="active"] [role="button"]:not(.${ACCENT_BACKGROUND_CLASS}):focus-visible :not(.${IMAGE_BACKED_TEXT_CLASS}),
+html[data-nightfall="active"] [role="tab"]:not(.${ACCENT_BACKGROUND_CLASS}):hover :not(.${IMAGE_BACKED_TEXT_CLASS}),
+html[data-nightfall="active"] [role="tab"]:not(.${ACCENT_BACKGROUND_CLASS}):focus-visible :not(.${IMAGE_BACKED_TEXT_CLASS}),
+html[data-nightfall="active"] [role="option"]:not(.${ACCENT_BACKGROUND_CLASS}):hover :not(.${IMAGE_BACKED_TEXT_CLASS}),
+html[data-nightfall="active"] [role="option"]:not(.${ACCENT_BACKGROUND_CLASS}):focus-visible :not(.${IMAGE_BACKED_TEXT_CLASS}),
+html[data-nightfall="active"] [role="treeitem"]:not(.${ACCENT_BACKGROUND_CLASS}):hover :not(.${IMAGE_BACKED_TEXT_CLASS}),
+html[data-nightfall="active"] [role="treeitem"]:not(.${ACCENT_BACKGROUND_CLASS}):focus-visible :not(.${IMAGE_BACKED_TEXT_CLASS}),
+html[data-nightfall="active"] summary:not(.${ACCENT_BACKGROUND_CLASS}):hover :not(.${IMAGE_BACKED_TEXT_CLASS}),
+html[data-nightfall="active"] summary:not(.${ACCENT_BACKGROUND_CLASS}):focus-visible :not(.${IMAGE_BACKED_TEXT_CLASS}) {
+  color: ${palette.textPrimary} !important;
+  -webkit-text-fill-color: ${palette.textPrimary} !important;
 }
 html[data-nightfall="active"] .${ADAPTED_BACKGROUND_CLASS} {
   background-color: var(--nightfall-element-bg) !important;
@@ -482,11 +544,21 @@ export class NightfallEngine {
     let transformedBackground: Rgb | null = null;
     const level = this.classifySurface(element, style, background);
     const forced = element.getAttribute('data-nightfall-repair') === 'true';
+    const preserveAccentBackground = shouldPreserveAccentBackground(background, {
+      interactive: this.isInteractive(element),
+      badgeLike: this.isBadgeLike(element, style),
+    });
+    element.classList.toggle(ACCENT_BACKGROUND_CLASS, preserveAccentBackground);
 
     if (forced) {
       const forcedBackground = this.surfaceColor(level);
       element.style.setProperty('--nightfall-element-bg', forcedBackground);
       transformedBackground = parseHex(forcedBackground);
+    } else if (preserveAccentBackground) {
+      // Keep authored accent fills (including their hover/active states) under
+      // site control. Retain the color locally so foreground contrast is still
+      // checked against the actual accent rather than an ancestor surface.
+      transformedBackground = background;
     } else if (background && background.a > 0.65 && !hasImage) {
       const key = `bg:${this.palette.id}:${level}:${style.backgroundColor}`;
       const value = this.cachedColor(key, () => {
@@ -527,7 +599,7 @@ export class NightfallEngine {
 
     if (forced) {
       element.style.setProperty('--nightfall-element-border', this.palette.border);
-    } else if (border && border.a > 0.2) {
+    } else if (!preserveAccentBackground && border && border.a > 0.2) {
       const visibleBoundary = this.isInteractive(element) || level === 'elevated' || level === 'overlay';
       element.style.setProperty(
         '--nightfall-element-border',
@@ -621,6 +693,7 @@ export class NightfallEngine {
     element.classList.remove(ADAPTED_BACKGROUND_CLASS);
     element.classList.remove(ADAPTED_FOREGROUND_CLASS);
     element.classList.remove(ADAPTED_BORDER_CLASS);
+    element.classList.remove(ACCENT_BACKGROUND_CLASS);
     element.classList.remove(IMAGE_BACKED_TEXT_CLASS);
     element.classList.remove(IMAGE_BRIGHTNESS_CLASS);
     element.style.removeProperty('--nightfall-element-bg');
@@ -642,8 +715,29 @@ export class NightfallEngine {
 
   private isInteractive(element: HTMLElement): boolean {
     return element.matches(
-      'button, input, textarea, select, option, [role="button"], [role="tab"], [role="menuitem"], [contenteditable="true"]',
+      'button, input, textarea, select, option, summary, a[href], [role="button"], [role="tab"], [role="menuitem"], [role="option"], [role="treeitem"], [contenteditable="true"]',
     );
+  }
+
+  private isBadgeLike(
+    element: HTMLElement,
+    style: CSSStyleDeclaration,
+  ): boolean {
+    if (
+      element.matches('mark, output, [role="status"]') ||
+      /(?:^|[\s_-])(badge|tag|pill|chip|capsule|label|status|token)(?=$|[\s_-])/i.test(
+        element.getAttribute('class') ?? '',
+      )
+    ) {
+      return true;
+    }
+
+    const radius = Number.parseFloat(style.borderRadius);
+    if (!Number.isFinite(radius) || radius < 6 || !style.display.startsWith('inline')) {
+      return false;
+    }
+    const bounds = element.getBoundingClientRect();
+    return bounds.height > 0 && bounds.height <= 80 && bounds.width <= 480;
   }
 
   private classifySurface(

@@ -143,6 +143,21 @@ try {
   await page.waitForFunction(
     () => getComputedStyle(document.querySelector('.dropdown-menu')).visibility === 'visible',
   );
+  const dropdownVisibleBeforeItemHover = await page.evaluate(
+    () => getComputedStyle(document.querySelector('.dropdown-menu')).visibility === 'visible',
+  );
+  const devtools = await page.createCDPSession();
+  await devtools.send('DOM.enable');
+  await devtools.send('CSS.enable');
+  const { root: documentNode } = await devtools.send('DOM.getDocument');
+  const { nodeId: dropdownItemNodeId } = await devtools.send('DOM.querySelector', {
+    nodeId: documentNode.nodeId,
+    selector: '.dropdown-item',
+  });
+  await devtools.send('CSS.forcePseudoState', {
+    nodeId: dropdownItemNodeId,
+    forcedPseudoClasses: ['hover'],
+  });
 
   const pageMetrics = await page.evaluate(() => {
     const parse = (value) => {
@@ -168,12 +183,17 @@ try {
       return contrast(parse(style.color), background) < 4.5;
     }).length;
     const paint = performance.getEntriesByType('paint').find((entry) => entry.name === 'first-contentful-paint');
+    const dropdown = getComputedStyle(document.querySelector('.dropdown-menu'));
+    const dropdownItem = getComputedStyle(document.querySelector('.dropdown-item'));
+    const dropdownBackground = parse(dropdown.backgroundColor);
+    const dropdownItemBackground = parse(dropdownItem.backgroundColor);
     return {
       firstContentfulPaintMs: paint?.startTime ?? null,
       rootLuminance: luminance(parse(getComputedStyle(document.documentElement).backgroundColor)),
       modalLuminance: luminance(parse(getComputedStyle(document.querySelector('.modal')).backgroundColor)),
-      dropdownLuminance: luminance(parse(getComputedStyle(document.querySelector('.dropdown-menu')).backgroundColor)),
-      dropdownVisible: getComputedStyle(document.querySelector('.dropdown-menu')).visibility === 'visible',
+      dropdownLuminance: luminance(dropdownBackground),
+      dropdownHoverSurfaceContrast: contrast(dropdownItemBackground, dropdownBackground),
+      dropdownHoverTextContrast: contrast(parse(dropdownItem.color), dropdownItemBackground),
       imageFilter: getComputedStyle(document.querySelector('img')).filter,
       contrastViolations,
       longTasks: window.__nightfallBenchmark.longTasks,
@@ -181,6 +201,7 @@ try {
       buttonUsable: !document.querySelector('button').disabled,
     };
   });
+  pageMetrics.dropdownVisible = dropdownVisibleBeforeItemHover;
 
   const extensionStatus = await worker.evaluate(async () => {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -539,6 +560,8 @@ try {
     pageMetrics.modalLuminance > 0.15 ||
     pageMetrics.dropdownLuminance > 0.15 ||
     !pageMetrics.dropdownVisible ||
+    pageMetrics.dropdownHoverSurfaceContrast < 1.5 ||
+    pageMetrics.dropdownHoverTextContrast < 4.5 ||
     pageMetrics.imageFilter !== 'contrast(1.1)' ||
     pageMetrics.contrastViolations > 0 ||
     !pageMetrics.buttonUsable ||

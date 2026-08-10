@@ -25,6 +25,9 @@ npm install
 npm run dev
 ```
 
+During development, content-script changes are applied in place to the active
+tab. Other tabs and windows are left untouched and no webpage is reloaded.
+
 For a production build:
 
 ```bash
