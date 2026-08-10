@@ -5,13 +5,22 @@ import { SLATE_BLUE } from '../utils/theme';
 describe('settings', () => {
   it('uses Original as the active default', () => {
     expect(normalizeSettings().mode).toBe('original');
+    expect(normalizeSettings().imageBrightness).toBe(100);
   });
 
   it('normalizes partial stored values with safe defaults', () => {
     const settings = normalizeSettings({ mode: 'linear-dark' });
     expect(settings).not.toHaveProperty('controls');
     expect(settings.mode).toBe('linear-dark');
+    expect(settings.imageBrightness).toBe(100);
     expect(settings.revision).toBe(0);
+  });
+
+  it('constrains image brightness to the supported range', () => {
+    expect(normalizeSettings({ imageBrightness: 74.6 }).imageBrightness).toBe(75);
+    expect(normalizeSettings({ imageBrightness: 10 }).imageBrightness).toBe(40);
+    expect(normalizeSettings({ imageBrightness: 150 }).imageBrightness).toBe(100);
+    expect(normalizeSettings({ imageBrightness: Number.NaN }).imageBrightness).toBe(100);
   });
 
   it('migrates removed and legacy mode values to Original', () => {

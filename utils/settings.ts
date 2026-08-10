@@ -19,6 +19,7 @@ export interface SiteSettings {
 export interface NightfallSettings {
   revision: number;
   mode: Mode;
+  imageBrightness: number;
   sites: Record<string, SiteSettings>;
 }
 
@@ -36,6 +37,7 @@ export const STORAGE_KEY = 'nightfallSettings';
 export const DEFAULT_SETTINGS: NightfallSettings = {
   revision: 0,
   mode: 'original',
+  imageBrightness: 100,
   sites: {},
 };
 
@@ -61,8 +63,16 @@ export function normalizeSettings(
   return {
     revision: Number.isSafeInteger(revision) ? revision! : 0,
     mode: normalizeMode(value?.mode),
+    imageBrightness: normalizeImageBrightness(value?.imageBrightness),
     sites,
   };
+}
+
+function normalizeImageBrightness(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return DEFAULT_SETTINGS.imageBrightness;
+  }
+  return Math.round(Math.min(100, Math.max(40, value)));
 }
 
 function normalizeMode(value: unknown): Mode {

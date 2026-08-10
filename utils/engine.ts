@@ -28,7 +28,9 @@ const BOOTSTRAP_ID = 'nightfall-bootstrap';
 const STYLE_ID = 'nightfall-styles';
 const BATCH_SIZE = 80;
 const MEDIA_SELECTOR = 'img, video, canvas, picture, iframe, object, embed, svg';
+const NON_IMAGE_MEDIA_SELECTOR = 'video, canvas, picture, iframe, object, embed, svg';
 const IMAGE_BACKED_TEXT_CLASS = 'nightfall-image-backed-text';
+const IMAGE_BRIGHTNESS_CLASS = 'nightfall-image-brightened';
 
 export const NIGHTFALL_OBSERVER_OPTIONS: MutationObserverInit = {
   childList: true,
@@ -48,11 +50,15 @@ export function shouldPreserveForeground(layers: BackgroundLayer[]): boolean {
   return false;
 }
 
-export function createBaseCss(palette: ThemePalette): string {
+export function createBaseCss(
+  palette: ThemePalette,
+  imageBrightness = 100,
+): string {
   return `
 html[data-nightfall="active"] {
   color-scheme: dark !important;
   background-color: ${palette.pageBackground} !important;
+  --nightfall-image-brightness: ${imageBrightness / 100};
 }
 html[data-nightfall="active"] body {
   background-color: transparent !important;
@@ -147,7 +153,10 @@ html[data-nightfall="active"] [data-nightfall-repair="true"] {
   color: var(--nightfall-element-fg) !important;
   border-color: var(--nightfall-element-border) !important;
 }
-html[data-nightfall="active"] ${MEDIA_SELECTOR} {
+html[data-nightfall="active"] .${IMAGE_BRIGHTNESS_CLASS} {
+  filter: var(--nightfall-original-image-filter, brightness(1)) brightness(var(--nightfall-image-brightness, 1)) !important;
+}
+html[data-nightfall="active"] ${NON_IMAGE_MEDIA_SELECTOR.split(', ').join(',\nhtml[data-nightfall="active"] ')} {
   filter: none !important;
   mix-blend-mode: normal !important;
 }
@@ -301,7 +310,7 @@ export class NightfallEngine {
     document.documentElement.removeAttribute('data-nightfall-theme');
     document.documentElement.removeAttribute('data-nightfall-transition');
     document.getElementById(STYLE_ID)?.remove();
-    document.querySelectorAll<HTMLElement>(`.nightfall-adapted, .${IMAGE_BACKED_TEXT_CLASS}`).forEach((element) => {
+    document.querySelectorAll<HTMLElement>(`.nightfall-adapted, .${IMAGE_BACKED_TEXT_CLASS}, .${IMAGE_BRIGHTNESS_CLASS}`).forEach((element) => {
       this.clearAdaptation(element);
     });
     document.querySelectorAll<HTMLElement>('[data-nightfall-repair]').forEach((element) => {
@@ -348,7 +357,7 @@ export class NightfallEngine {
   private installStyles(): void {
     const style = document.getElementById(STYLE_ID) ?? document.createElement('style');
     style.id = STYLE_ID;
-    style.textContent = createBaseCss(this.palette);
+    style.textContent = createBaseCss(this.palette, this.settings.imageBrightness);
     if (!style.isConnected) document.documentElement.append(style);
   }
 
@@ -437,6 +446,10 @@ export class NightfallEngine {
   }
 
   private processElement(element: Element): void {
+    if (element instanceof HTMLImageElement) {
+      this.adaptImageBrightness(element);
+      return;
+    }
     if (
       !(element instanceof HTMLElement) ||
       element.matches(MEDIA_SELECTOR) ||
@@ -592,9 +605,22 @@ export class NightfallEngine {
   private clearAdaptation(element: HTMLElement): void {
     element.classList.remove('nightfall-adapted');
     element.classList.remove(IMAGE_BACKED_TEXT_CLASS);
+    element.classList.remove(IMAGE_BRIGHTNESS_CLASS);
     element.style.removeProperty('--nightfall-element-bg');
     element.style.removeProperty('--nightfall-element-fg');
     element.style.removeProperty('--nightfall-element-border');
+    element.style.removeProperty('--nightfall-original-image-filter');
+  }
+
+  private adaptImageBrightness(element: HTMLImageElement): void {
+    this.clearAdaptation(element);
+    if (this.settings.imageBrightness === 100) return;
+    const authoredFilter = getComputedStyle(element).filter;
+    element.style.setProperty(
+      '--nightfall-original-image-filter',
+      authoredFilter === 'none' ? 'brightness(1)' : authoredFilter,
+    );
+    element.classList.add(IMAGE_BRIGHTNESS_CLASS);
   }
 
   private isInteractive(element: HTMLElement): boolean {

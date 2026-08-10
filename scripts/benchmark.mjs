@@ -62,7 +62,7 @@ const fixture = `<!doctype html>
     </style>
   </head>
   <body>
-    <main><div class="card"><h1>Benchmark page</h1><p>Readable ordinary text.</p><button id="action">Action</button><div class="dropdown"><button class="dropdown-toggle">Menu</button><div class="dropdown-menu"><a class="dropdown-item" href="#item">Dropdown item</a></div></div><img alt="Protected media" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='90'%3E%3Crect width='160' height='90' fill='%23e85d75'/%3E%3Ccircle cx='80' cy='45' r='28' fill='%23456fe8'/%3E%3C/svg%3E"></div></main>
+    <main><div class="card"><h1>Benchmark page</h1><p>Readable ordinary text.</p><button id="action">Action</button><div class="dropdown"><button class="dropdown-toggle">Menu</button><div class="dropdown-menu"><a class="dropdown-item" href="#item">Dropdown item</a></div></div><img alt="Protected media" style="filter: contrast(1.1)" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='90'%3E%3Crect width='160' height='90' fill='%23e85d75'/%3E%3Ccircle cx='80' cy='45' r='28' fill='%23456fe8'/%3E%3C/svg%3E"></div></main>
     <script>setTimeout(() => { const modal = document.createElement('div'); modal.className = 'modal'; modal.textContent = 'SPA navigation content'; document.body.append(modal); }, 250);</script>
   </body>
 </html>`;
@@ -202,6 +202,21 @@ try {
     modeButtons: document.querySelectorAll('[data-mode]').length,
     permissionPromptVisible: Boolean(document.querySelector('#grant-access')),
   }));
+  await popup.$eval('#image-brightness', (input) => {
+    input.value = '70';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  await page.waitForFunction(
+    () => getComputedStyle(document.querySelector('img')).filter.includes('brightness(0.7)'),
+    { polling: 100, timeout: 5_000 },
+  );
+  const imageBrightness = {
+    filter: await page.$eval('img', (image) => getComputedStyle(image).filter),
+    stored: await worker.evaluate(async () =>
+      (await chrome.storage.local.get('nightfallSettings')).nightfallSettings?.imageBrightness ?? null,
+    ),
+  };
   await popup.click('[data-mode="linear-dark"]');
   await page.waitForFunction(
     () => document.documentElement.dataset.nightfallTheme === 'linear-dark',
@@ -498,6 +513,7 @@ try {
     ...pageMetrics,
     extension: extensionStatus.status,
     popup: popupMetrics,
+    imageBrightness,
     immediateModeChange: {
       theme: transitionStart.theme,
       transitionStartBackground: transitionStart.background,
@@ -523,10 +539,13 @@ try {
     pageMetrics.modalLuminance > 0.15 ||
     pageMetrics.dropdownLuminance > 0.15 ||
     !pageMetrics.dropdownVisible ||
-    pageMetrics.imageFilter !== 'none' ||
+    pageMetrics.imageFilter !== 'contrast(1.1)' ||
     pageMetrics.contrastViolations > 0 ||
     !pageMetrics.buttonUsable ||
     popupMetrics.modeButtons !== 5 ||
+    imageBrightness.stored !== 70 ||
+    !imageBrightness.filter.includes('contrast(1.1)') ||
+    !imageBrightness.filter.includes('brightness(0.7)') ||
     transitionStart.theme !== 'linear-dark' ||
     transitionStart.background === 'rgb(255, 255, 255)' ||
     settledModeChange.theme !== 'linear-dark' ||

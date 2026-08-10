@@ -27,6 +27,17 @@ describe('base theme styles', () => {
     expect(css).not.toContain('data-nightfall-pending');
   });
 
+  it('dims only img elements and composes with their authored filters', () => {
+    const css = createBaseCss(SLATE_BLUE, 75);
+
+    expect(css).toContain('--nightfall-image-brightness: 0.75');
+    expect(css).toContain('.nightfall-image-brightened');
+    expect(css).toContain('var(--nightfall-original-image-filter, brightness(1)) brightness(var(--nightfall-image-brightness, 1))');
+    expect(css).toContain('html[data-nightfall="active"] video');
+    expect(css).not.toContain('html[data-nightfall="active"] img {\n  filter: none');
+    expect(css).not.toContain('img {\n  filter: none');
+  });
+
   it('observes inserted content without tracking attribute churn', () => {
     expect(NIGHTFALL_OBSERVER_OPTIONS).toEqual({
       childList: true,

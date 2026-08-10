@@ -207,6 +207,17 @@ function render(status: PerformanceStatus | null) {
 
     ${hasAccess ? `<section class="mode" aria-label="Page appearance">${modeButtons}</section>` : ''}
 
+    ${hasAccess ? `
+      <section class="image-brightness" aria-label="Image brightness">
+        <div class="image-brightness-heading">
+          <label for="image-brightness"><strong>Image brightness</strong><small>Dims photos without changing their colors</small></label>
+          <output id="image-brightness-value" for="image-brightness">${settings.imageBrightness}%</output>
+        </div>
+        <input id="image-brightness" type="range" min="40" max="100" step="1" value="${settings.imageBrightness}" ${selectedMode === 'original' ? 'disabled' : ''} />
+        ${selectedMode === 'original' ? '<small class="image-brightness-hint">Choose a dark appearance to apply image brightness.</small>' : ''}
+      </section>
+    ` : ''}
+
     ${hasAccess && showAiSetup ? `
       <section class="ai-theme" aria-label="AI-generated appearance">
         <div class="ai-heading">
@@ -358,6 +369,17 @@ function bindEvents() {
         mode,
       });
     });
+  });
+
+  const imageBrightness = app.querySelector<HTMLInputElement>('#image-brightness');
+  const imageBrightnessValue = app.querySelector<HTMLOutputElement>('#image-brightness-value');
+  imageBrightness?.addEventListener('input', () => {
+    if (imageBrightnessValue) imageBrightnessValue.value = `${imageBrightness.value}%`;
+  });
+  imageBrightness?.addEventListener('change', () => {
+    const value = Number(imageBrightness.value);
+    if (!Number.isFinite(value) || value === settings.imageBrightness) return;
+    void persist({ ...settings, imageBrightness: value });
   });
 
   app.querySelector<HTMLButtonElement>('#generate-ai')?.addEventListener('click', () => {
