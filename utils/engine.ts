@@ -31,6 +31,9 @@ const MEDIA_SELECTOR = 'img, video, canvas, picture, iframe, object, embed, svg'
 const NON_IMAGE_MEDIA_SELECTOR = 'video, canvas, picture, iframe, object, embed, svg';
 const IMAGE_BACKED_TEXT_CLASS = 'nightfall-image-backed-text';
 const IMAGE_BRIGHTNESS_CLASS = 'nightfall-image-brightened';
+const ADAPTED_BACKGROUND_CLASS = 'nightfall-adapted-background';
+const ADAPTED_FOREGROUND_CLASS = 'nightfall-adapted-foreground';
+const ADAPTED_BORDER_CLASS = 'nightfall-adapted-border';
 
 export const NIGHTFALL_OBSERVER_OPTIONS: MutationObserverInit = {
   childList: true,
@@ -141,11 +144,13 @@ html[data-nightfall="active"] .submenu > li > a:focus {
   color: ${palette.textPrimary} !important;
   text-decoration: none;
 }
-html[data-nightfall="active"] .nightfall-adapted {
+html[data-nightfall="active"] .${ADAPTED_BACKGROUND_CLASS} {
   background-color: var(--nightfall-element-bg) !important;
+}
+html[data-nightfall="active"] .${ADAPTED_BORDER_CLASS} {
   border-color: var(--nightfall-element-border) !important;
 }
-html[data-nightfall="active"] .nightfall-adapted:not(.${IMAGE_BACKED_TEXT_CLASS}) {
+html[data-nightfall="active"] .${ADAPTED_FOREGROUND_CLASS}:not(.${IMAGE_BACKED_TEXT_CLASS}) {
   color: var(--nightfall-element-fg) !important;
 }
 html[data-nightfall="active"] [data-nightfall-repair="true"] {
@@ -530,11 +535,20 @@ export class NightfallEngine {
       );
     }
 
-    if (
-      element.style.getPropertyValue('--nightfall-element-bg') ||
-      element.style.getPropertyValue('--nightfall-element-fg') ||
-      element.style.getPropertyValue('--nightfall-element-border')
-    ) {
+    const hasAdaptedBackground = Boolean(
+      element.style.getPropertyValue('--nightfall-element-bg'),
+    );
+    const hasAdaptedForeground = Boolean(
+      element.style.getPropertyValue('--nightfall-element-fg'),
+    );
+    const hasAdaptedBorder = Boolean(
+      element.style.getPropertyValue('--nightfall-element-border'),
+    );
+    element.classList.toggle(ADAPTED_BACKGROUND_CLASS, hasAdaptedBackground);
+    element.classList.toggle(ADAPTED_FOREGROUND_CLASS, hasAdaptedForeground);
+    element.classList.toggle(ADAPTED_BORDER_CLASS, hasAdaptedBorder);
+
+    if (hasAdaptedBackground || hasAdaptedForeground || hasAdaptedBorder) {
       element.classList.add('nightfall-adapted');
     }
   }
@@ -604,6 +618,9 @@ export class NightfallEngine {
 
   private clearAdaptation(element: HTMLElement): void {
     element.classList.remove('nightfall-adapted');
+    element.classList.remove(ADAPTED_BACKGROUND_CLASS);
+    element.classList.remove(ADAPTED_FOREGROUND_CLASS);
+    element.classList.remove(ADAPTED_BORDER_CLASS);
     element.classList.remove(IMAGE_BACKED_TEXT_CLASS);
     element.classList.remove(IMAGE_BRIGHTNESS_CLASS);
     element.style.removeProperty('--nightfall-element-bg');

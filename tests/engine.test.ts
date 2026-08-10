@@ -27,6 +27,15 @@ describe('base theme styles', () => {
     expect(css).not.toContain('data-nightfall-pending');
   });
 
+  it('applies each adapted property only to elements explicitly marked for it', () => {
+    const css = createBaseCss(SLATE_BLUE);
+
+    expect(css).toContain('.nightfall-adapted-background {');
+    expect(css).toContain('.nightfall-adapted-foreground:not(.nightfall-image-backed-text)');
+    expect(css).toContain('.nightfall-adapted-border {');
+    expect(css).not.toContain('.nightfall-adapted {\n  background-color:');
+  });
+
   it('dims only img elements and composes with their authored filters', () => {
     const css = createBaseCss(SLATE_BLUE, 75);
 
@@ -63,6 +72,6 @@ describe('base theme styles', () => {
     const css = createBaseCss(SLATE_BLUE);
     expect(css).toContain('a:not(.nightfall-image-backed-text)');
     expect(css).toContain('button:not(.nightfall-image-backed-text)');
-    expect(css).toContain('.nightfall-adapted:not(.nightfall-image-backed-text)');
+    expect(css).toContain('.nightfall-adapted-foreground:not(.nightfall-image-backed-text)');
   });
 });
