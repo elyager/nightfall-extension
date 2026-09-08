@@ -12,6 +12,10 @@ node_modules
 stats.html
 stats-*.json
 .wxt
+output/browser-check/
+output/release-capture.mjs
+output/website/
+website/.netlify/
 web-ext.config.ts
 
 # Editor directories and files
@@ -24,3 +28,5 @@ web-ext.config.ts
 *.njsproj
 *.sln
 *.sw?
+
+.env

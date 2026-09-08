@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createAiThemeRequest, parseAiThemeResponse, type PageStyleSnapshot } from '../utils/ai-theme';
-import { SLATE_BLUE } from '../utils/theme';
+import { DARK_THEME } from '../utils/theme';
 
 const snapshot: PageStyleSnapshot = {
   version: 1,
@@ -34,19 +34,19 @@ describe('AI theme integration', () => {
   });
 
   it('parses a constrained palette from a chat completion', () => {
-    const palette = { ...SLATE_BLUE, id: undefined, label: undefined };
+    const palette = { ...DARK_THEME, id: undefined, label: undefined };
     const result = parseAiThemeResponse({
       choices: [{ message: { content: JSON.stringify(palette) } }],
     });
     expect(result.id).toBe('ai');
-    expect(result.pageBackground).toBe(SLATE_BLUE.pageBackground);
+    expect(result.pageBackground).toBe(DARK_THEME.pageBackground);
   });
 
   it('discards arbitrary CSS returned by the model and recovers safely', () => {
-    const palette = { ...SLATE_BLUE, pageBackground: 'var(--stolen)' };
+    const palette = { ...DARK_THEME, pageBackground: 'var(--stolen)' };
     expect(parseAiThemeResponse({
       choices: [{ message: { content: JSON.stringify(palette) } }],
-    }).pageBackground).toBe(SLATE_BLUE.pageBackground);
+    }).pageBackground).toBe(DARK_THEME.pageBackground);
   });
 
   it('fills missing properties and repairs inaccessible core colors', () => {
@@ -57,14 +57,14 @@ describe('AI theme integration', () => {
         focusRing: '#FFB000',
       }) } }],
     });
-    expect(result.pageBackground).toBe(SLATE_BLUE.pageBackground);
-    expect(result.textPrimary).toBe(SLATE_BLUE.textPrimary);
+    expect(result.pageBackground).toBe(DARK_THEME.pageBackground);
+    expect(result.textPrimary).toBe(DARK_THEME.textPrimary);
     expect(result.focusRing).toBe('#FFB000');
   });
 
   it('accepts JSON fenced by a free model', () => {
     const result = parseAiThemeResponse({
-      choices: [{ message: { content: `\`\`\`json\n${JSON.stringify(SLATE_BLUE)}\n\`\`\`` } }],
+      choices: [{ message: { content: `\`\`\`json\n${JSON.stringify(DARK_THEME)}\n\`\`\`` } }],
     });
     expect(result.id).toBe('ai');
   });

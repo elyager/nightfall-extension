@@ -1,0 +1,156 @@
+- banner:
+  - button "Main menu":
+  - link "Chrome Web Store Developer Dashboard":
+    - /url: ./webstore/devconsole/7e317a23-7045-4044-9c92-3b73bbe9e7f0
+  - link "Skip to main content"
+  - listbox "Switch Publisher Account Menu":
+    - option "Erik Elyager" [selected]
+  - button "Google apps":
+  - 'button "Google Account: Erik Ochoa (elyager@gmail.com), Google membership"':
+- navigation "Primary menu"
+- main:
+  - generic "Nightfall":
+    - heading "Nightfall" [level=1]
+    - generic: "Status: Pending review"
+    - generic: "ID: kliplffelmeeciahgamhfdmfnbghobfc"
+    - button "Save draft" [disabled]:
+      - generic: Save draft
+    - button "Submit for review" [disabled]:
+      - generic: Submit for review
+    - button "View more menu options":
+      - generic: more_vert
+  - navigation "Item menu":
+    - button "Item Page":
+      - generic: Item Page
+    - menu "Item navigation links":
+      - menuitem "Build":
+        - generic: Build
+      - menuitem "Access":
+        - generic: Access
+      - menuitem "Analytics":
+        - generic: Analytics
+  - article "Store listing":
+    - heading "Store listing" [level=2]
+    - heading "Alerts" [level=1]
+    - img "Info":
+    - paragraph:
+      - text: Check out our tips for creating a great listing page.
+      - link "Learn more":
+        - /url: https://developer.chrome.com/docs/webstore/best-listing
+    - button "Dismiss":
+      - generic: clear
+    - region "Product details":
+      - heading "Product details" [level=3]
+      - paragraph: For all languages
+      - paragraph: Title from package
+      - paragraph: Nightfall
+      - paragraph: Summary from package
+      - paragraph: Comfortable dark mode, one site at a time. Adjust image brightness and keep your favorite sites easy to read.
+      - generic: Description*
+      - textbox "Description*":
+        - /placeholder: ""
+        - text: "Nightfall turns bright pages into readable dark surfaces while keeping the colors that make a site feel like itself. Choose the appearance for each site: • Original: keep the website’s own appearance. • Dark: apply Nightfall’s adaptive dark palette. • AI: optionally generate a palette using your own OpenRouter API key. Make the page comfortable for you: • Allow access only to the sites where you want Nightfall, including matching subdomains. • Remember your appearance choices for future visits. • Dim images from 100% to 40% brightness without changing their colors. • Use the element picker to darken individual elements the theme missed, with fixes saved for that page. • Toggle Nightfall on the current allowed site with Ctrl+Shift+D, or Command+Shift+D on Mac. You can change the shortcut in Chrome’s extension shortcut settings. Ordinary dark mode runs on your device. Nightfall has no advertising or analytics. Settings, generated palettes, and saved element fixes use local extension storage. AI is optional. Only when you choose to generate, Nightfall sends a limited summary of page styles to OpenRouter and a model provider. This summary excludes page text, page URLs, selectors, IDs, classes, form values, cookies, and browser storage. Your API key is stored locally and sent to OpenRouter to authenticate requests. A zero-data-retention routing requirement is enabled by default; service and account policies still apply. AI availability depends on OpenRouter. Chrome’s internal pages, the Chrome Web Store, and other protected browser pages cannot be modified. Website designs vary; if something needs attention, use the element picker or return to Original. Privacy policy: https://nightfall-elyager.netlify.app/privacy/ Support: elyager@gmail.com"
+      - text: 1,774/16,000
+      - generic: 1774 of 16000 characters entered
+      - paragraph
+      - generic: Focus on explaining what the item does and why users should install it
+      - combobox "Category* Accessibility":
+        - generic: Category*
+        - generic: Accessibility
+      - combobox "Language* English":
+        - generic: Language*
+        - generic: English
+      - text: Specifying your item’s language will help users find it. If you support multiple languages, then you should internationalize your item.
+      - link "Learn more about how to internationalize your item":
+        - /url: https://developer.chrome.com/webstore/i18n
+        - text: Learn more
+    - region "Graphic assets":
+      - heading "Graphic assets" [level=3]
+      - paragraph: Store icon *
+      - paragraph: 128x128 pixels
+      - paragraph:
+        - text: Please ensure icon follows
+        - link "image guidelines":
+          - /url: https://developer.chrome.com/webstore/images#icons
+      - button "Remove image Store icon":
+      - img "Store icon"
+      - heading "Global assets" [level=4]
+      - generic: Global promo video
+      - textbox "Global promo video":
+        - /placeholder: Youtube URL
+      - paragraph: "Enter a YouTube video URL. Example: https://www.youtube.com/watch?v=1234567890A"
+      - paragraph: Screenshots *
+      - paragraph: Up to a maximum of 5
+      - paragraph: 1280x800 or 640x400
+      - paragraph: JPEG or 24-bit PNG (no alpha)
+      - paragraph: At least one is required
+      - button "Remove image Screenshot 1":
+      - img "Screenshot 1"
+      - button "Screenshots * Drop image here":
+        - paragraph: Drop image here
+      - paragraph: Small promo tile
+      - paragraph: 440x280 Canvas
+      - paragraph: JPEG or 24-bit PNG (no alpha)
+      - button "Remove image Small promo tile":
+      - img "Small promo tile"
+      - paragraph: Marquee promo tile
+      - paragraph: 1400x560 Canvas
+      - paragraph: JPEG or 24-bit PNG (no alpha)
+      - button "Marquee promo tile Drop image here":
+        - paragraph: Drop image here
+    - region "Additional fields":
+      - heading "Additional fields" [level=3]
+      - combobox "Official URL None":
+        - generic: Official URL
+        - generic: None
+      - text: Or
+      - link "Add a new site":
+        - /url: https://www.google.com/webmasters/tools
+      - generic: If your item is associated with a website that you own, select that website from the list. You can register as the owner for a site using Google Search Console.
+      - generic: Homepage URL
+      - textbox "Homepage URL": https://nightfall-elyager.netlify.app/
+      - paragraph: Link to website for your item
+      - text: 38/2,048
+      - generic: 38 of 2048 characters entered
+      - generic: Support URL
+      - textbox "Support URL": https://nightfall-elyager.netlify.app/#contact
+      - paragraph
+      - text: 46/2,048
+      - generic: 46 of 2048 characters entered
+      - text: Providing the URLs for description and support pages can improve your users’ experience and help make this item’s ratings and comments more meaningful.
+      - link "Learn more about support URLs":
+        - /url: https://developer.chrome.com/docs/webstore/cws-dashboard-listing#support-url
+        - text: Learn more
+      - generic: Mature content
+      - switch "Mature content":
+      - text: Examples of mature content include sexual and suggestive content, strong language, violence, or a focus on the consumption or sale of alcohol, tobacco, or drugs.
+      - link "Learn more about item content ratings":
+        - /url: https://developer.chrome.com/webstore/rating
+        - text: Learn more
+    - region "Item support":
+      - heading "Item support" [level=3]
+      - text: Visibility.
+      - link "Change visibility here":
+        - /url: ./webstore/devconsole/7e317a23-7045-4044-9c92-3b73bbe9e7f0/settings#item-support
+      - text: Turn your item support on or off on your store listing.
+      - link "Learn more about item support":
+        - /url: https://developer.chrome.com/docs/webstore/support-users
+        - text: Learn more
+- contentinfo:
+  - heading "Useful Resources" [level=2]
+  - list "Useful Resources":
+    - link "Developer Guide":
+      - /url: https://developer.chrome.com/webstore?hl=en
+  - heading "Need Help?" [level=2]
+  - list "Need Help?":
+    - link "Contact Us":
+      - /url: https://support.google.com/chrome_webstore?p=contact&hl=en
+    - link "Give Feedback":
+      - /url: https://chrome.google.com/webstore/devconsole/7e317a23-7045-4044-9c92-3b73bbe9e7f0/kliplffelmeeciahgamhfdmfnbghobfc/edit/listing
+  - generic: © 2026 Google
+  - text: "-"
+  - link "Developer Agreement":
+    - /url: https://developer.chrome.com/webstore/terms?hl=en
+  - text: "-"
+  - link "Google Privacy Policy":
+    - /url: https://www.google.com/intl/en/privacy.html

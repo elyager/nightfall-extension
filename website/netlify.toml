@@ -1,0 +1,28 @@
+[build]
+  publish = "public"
+
+[[redirects]]
+  from = "https://nightfall-elyager.netlify.app/*"
+  to = "https://nightfall.elyager.com/:splat"
+  status = 301
+  force = true
+
+[[redirects]]
+  from = "http://nightfall-elyager.netlify.app/*"
+  to = "https://nightfall.elyager.com/:splat"
+  status = 301
+  force = true
+
+[[redirects]]
+  from = "/privacy-policy.html"
+  to = "/privacy/"
+  status = 301
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "no-referrer"
+    X-Frame-Options = "DENY"
+    Content-Security-Policy = "default-src 'none'; style-src 'self'; img-src 'self'; font-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+    Permissions-Policy = "camera=(), microphone=(), geolocation=()"

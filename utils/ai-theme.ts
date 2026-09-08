@@ -1,5 +1,5 @@
 import { normalizeAiTheme } from './settings';
-import { SLATE_BLUE, type ThemePalette } from './theme';
+import { DARK_THEME, type ThemePalette } from './theme';
 import { contrastRatio, luminance, parseHex, parseRgb } from './color';
 
 export const OPENROUTER_ORIGIN = 'https://openrouter.ai/*';
@@ -166,17 +166,17 @@ function recoverAiTheme(value: unknown): ThemePalette {
     key,
     typeof source[key] === 'string' && HEX_COLOR.test(source[key])
       ? source[key]
-      : SLATE_BLUE[key],
+      : DARK_THEME[key],
   ])) as unknown as ThemePalette;
   const shadow = typeof source.shadow === 'string' && SHADOW_COLOR.test(source.shadow)
     ? parseRgb(source.shadow)
     : null;
   candidate.shadow = shadow && shadow.r <= 255 && shadow.g <= 255 && shadow.b <= 255
     ? source.shadow as string
-    : SLATE_BLUE.shadow;
+    : DARK_THEME.shadow;
   candidate.neutralBlend = typeof source.neutralBlend === 'number' && Number.isFinite(source.neutralBlend)
     ? source.neutralBlend
-    : SLATE_BLUE.neutralBlend;
+    : DARK_THEME.neutralBlend;
 
   const page = parseHex(candidate.pageBackground);
   const surface = parseHex(candidate.surface);
@@ -189,12 +189,12 @@ function recoverAiTheme(value: unknown): ThemePalette {
     contrastRatio(parseHex(candidate.textSecondary), surface) < 3 ||
     contrastRatio(parseHex(candidate.link), page) < 4.5;
   if (criticalColorsAreUnsafe) {
-    candidate.pageBackground = SLATE_BLUE.pageBackground;
-    candidate.surface = SLATE_BLUE.surface;
-    candidate.elevatedSurface = SLATE_BLUE.elevatedSurface;
-    candidate.textPrimary = SLATE_BLUE.textPrimary;
-    candidate.textSecondary = SLATE_BLUE.textSecondary;
-    candidate.link = SLATE_BLUE.link;
+    candidate.pageBackground = DARK_THEME.pageBackground;
+    candidate.surface = DARK_THEME.surface;
+    candidate.elevatedSurface = DARK_THEME.elevatedSurface;
+    candidate.textPrimary = DARK_THEME.textPrimary;
+    candidate.textSecondary = DARK_THEME.textSecondary;
+    candidate.link = DARK_THEME.link;
   }
 
   const theme = normalizeAiTheme(candidate);

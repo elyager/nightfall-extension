@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#111722" />
+    <meta name="description" content="How Nightfall handles site access, local settings, optional OpenRouter AI requests, and support messages." />
+    <title>Privacy policy | Nightfall</title>
+    <link rel="icon" href="/icon.png" type="image/png" />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to content</a>
+    <div class="page-shell">
+      <header class="site-header"><a class="brand" href="/" aria-label="Nightfall home"><img src="/icon.png" width="36" height="36" alt="" />Nightfall</a><nav aria-label="Main navigation"><a href="/">Home</a><a href="mailto:elyager@gmail.com">Contact</a></nav></header>
+      <main id="main" class="policy">
+        <p class="eyebrow">Nightfall</p>
+        <h1>Privacy policy</h1>
+        <p class="policy-date">Effective September 8, 2026 · Nightfall 1.0.0</p>
+        <p class="policy-summary">Nightfall processes page styles on your device in Dark mode. If you choose to generate an AI theme, it sends a limited summary of those styles to OpenRouter.</p>
+
+        <section aria-labelledby="about"><h2 id="about">Who makes Nightfall</h2><p>Nightfall is a Chrome extension developed by Erik Elyager. This policy covers the extension, this product website, and messages you send for support. Contact: <a href="mailto:elyager@gmail.com">elyager@gmail.com</a>.</p></section>
+
+        <section aria-labelledby="local"><h2 id="local">What stays in your browser</h2><p>Nightfall reads page structure and computed styles to change the appearance of sites you allow. Ordinary dark mode does not send this information to the developer or to an AI service.</p><p>Nightfall uses Chrome’s local extension storage for:</p><ul><li><strong>Preferences:</strong> appearance mode, image brightness, site hostnames and their settings, and generated color palettes.</li><li><strong>Element fixes:</strong> the page path and CSS selector of each element you choose to repair. Selectors can contain element IDs or class names.</li><li><strong>Your optional OpenRouter API key:</strong> saved locally for future generation requests. It is sent to OpenRouter to authenticate those requests.</li><li><strong>AI diagnostic logs:</strong> up to 20 recent response and error entries, including timestamps, status codes, retention preference, attempt number, and response text. The logger does not deliberately include the API key or outgoing page-style summary. Responses can include provider-supplied metadata.</li></ul><p>These settings are not sent to the developer or synchronized by Nightfall to a cloud account. Page processing also uses temporary data in memory while the page is open.</p></section>
+
+        <section aria-labelledby="ai"><h2 id="ai">When you use optional AI generation</h2><p>AI mode requires your own OpenRouter API key and permission to connect to OpenRouter. When you select <strong>Generate and apply</strong> or <strong>Generate again</strong>, Nightfall sends an HTTPS request directly to OpenRouter, which routes it to a model provider to create a color palette.</p><p>The request includes aggregated colors and frequencies, broad font categories and sizes, spacing, surface shapes, element counts, a viewport-size category, and page color-scheme information. The style summary excludes page text, the page URL, CSS selectors, element IDs and classes, form values, cookies, and browser storage. It does not include screenshots or image contents.</p><p>OpenRouter receives your API key for authentication and normal connection information, such as your IP address. OpenRouter and its model provider process the style summary under their own policies. The generated palette is then saved locally.</p><p><strong>Require zero-data retention</strong> is selected by default when the popup opens. It requests routing to an endpoint with a zero-data-retention policy. If you turn it off, this request no longer requires that restriction; your OpenRouter account settings can still impose it. This control does not guarantee that all service metadata is deleted. Review <a href="https://openrouter.ai/privacy/">OpenRouter’s privacy policy</a>, <a href="https://openrouter.ai/docs/guides/privacy/data-collection">data-collection documentation</a>, and <a href="https://openrouter.ai/docs/guides/features/zdr">retention controls</a> before using AI mode.</p></section>
+
+        <section aria-labelledby="permissions"><h2 id="permissions">Why Nightfall asks for access</h2><ul><li><strong>Current tab:</strong> identifies the page when you open the extension or use its shortcut.</li><li><strong>Scripting:</strong> applies and removes the bundled appearance code on allowed sites.</li><li><strong>Storage:</strong> remembers your choices and the local data described above.</li><li><strong>Optional site access:</strong> lets Nightfall style sites you explicitly allow, including matching subdomains. Access to OpenRouter is requested separately when you generate an AI theme.</li></ul><p>Nightfall does not request permission to read Chrome’s browsing-history database.</p></section>
+
+        <section aria-labelledby="controls"><h2 id="controls">Your choices and deletion</h2><p>You can use Dark without an OpenRouter account. Choose Original to restore a site’s appearance. You can remove site access in Chrome’s extension settings.</p><p>Use <strong>Forget key</strong> in the AI section to delete the locally saved API key, <strong>Clear</strong> in OpenRouter logs to remove saved logs, or <strong>Clear</strong> beside element fixes to remove fixes for the current page. Local preferences and generated palettes remain until replaced or the extension’s local data is removed. Uninstalling Nightfall removes its local extension data from that Chrome profile.</p><p>Deleting local data does not delete records held by OpenRouter or a model provider. Manage those through the relevant service.</p></section>
+
+        <section aria-labelledby="website"><h2 id="website">This website and support</h2><p>This website has no advertising, analytics scripts, tracking cookies, or external fonts. It is hosted on Netlify. Netlify processes normal website connection and request information to deliver and secure the site; see <a href="https://www.netlify.com/privacy/">Netlify’s privacy policy</a>.</p><p>If you email support, Erik Elyager receives your email address, your message, and anything you attach. This information is used to respond and resolve your request. You can request deletion of support correspondence at the same address, subject to any necessary record-retention obligations. Please do not send API keys or other secrets.</p></section>
+
+        <section aria-labelledby="use"><h2 id="use">Data use and policy changes</h2><p>Nightfall does not sell user data, use it for advertising, or use it to determine creditworthiness. The developer does not receive extension telemetry or browsing activity. OpenRouter and its model provider process style summaries to generate the palettes you request. Erik Elyager uses support messages to respond to your requests.</p><p>Erik Elyager will update this policy when Nightfall’s data practices change. The effective date appears above. For questions about this policy or information you provided directly, contact Erik Elyager at <a href="mailto:elyager@gmail.com">elyager@gmail.com</a>.</p></section>
+      </main>
+      <footer class="site-footer"><span>Nightfall · Made by Erik Elyager</span><a href="/">Back to Nightfall</a><span>Chrome is a trademark of Google LLC.</span></footer>
+    </div>
+  </body>
+</html>

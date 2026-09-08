@@ -41,8 +41,9 @@ export const DEFAULT_SETTINGS: NightfallSettings = {
   sites: {},
 };
 
-type NightfallSettingsInput = Omit<Partial<NightfallSettings>, 'sites'> & {
-  sites?: Record<string, Partial<SiteSettings>>;
+type NightfallSettingsInput = Omit<Partial<NightfallSettings>, 'sites' | 'mode'> & {
+  mode?: string;
+  sites?: Record<string, Omit<Partial<SiteSettings>, 'mode'> & { mode?: string }>;
 };
 
 export function normalizeSettings(
@@ -78,12 +79,13 @@ function normalizeImageBrightness(value: unknown): number {
 function normalizeMode(value: unknown): Mode {
   if (
     value === 'original' ||
-    value === 'slate-blue' ||
-    value === 'linear-dark' ||
-    value === 'github-dark' ||
+    value === 'dark' ||
     value === 'ai'
   ) {
     return value;
+  }
+  if (value === 'slate-blue' || value === 'linear-dark' || value === 'github-dark') {
+    return 'dark';
   }
   if (
     value === 'native' ||
@@ -207,4 +209,16 @@ export function updateSiteSettings(
       [hostname]: { ...current, ...update },
     },
   };
+}
+
+export function toggleSiteSettings(
+  settings: NightfallSettings,
+  hostname: string,
+): NightfallSettings {
+  const current = getSiteSettings(settings, hostname);
+  const active = current.enabled && current.mode !== 'original';
+  return updateSiteSettings(settings, hostname, {
+    enabled: !active,
+    mode: current.mode === 'original' ? 'dark' : current.mode,
+  });
 }

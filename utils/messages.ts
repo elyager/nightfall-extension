@@ -1,6 +1,6 @@
 import type { NightfallSettings, PerformanceStatus } from './settings';
 
-export const CONTENT_PROTOCOL_VERSION = 4;
+export const CONTENT_PROTOCOL_VERSION = 5;
 
 export type ContentMessage =
   | { type: 'GET_STATUS' }
@@ -19,6 +19,7 @@ export type ContentResponse =
   | { ok: false; error: string };
 
 export type BackgroundMessage =
+  | { type: 'INSTALL_THEME_OVERRIDES' }
   | { type: 'ENSURE_CONTENT_SCRIPT'; tabId: number }
   | { type: 'ARM_POPUP_REOPEN'; tabId: number; pattern: string }
   | { type: 'DISARM_POPUP_REOPEN' }

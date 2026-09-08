@@ -1,8 +1,8 @@
 {
   "name": "nightfall-extension",
-  "description": "Fast, private dark mode for the web.",
+  "description": "Comfortable dark mode, one site at a time. Adjust image brightness and keep your favorite sites easy to read.",
   "private": true,
-  "version": "0.1.0",
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
     "dev": "wxt",

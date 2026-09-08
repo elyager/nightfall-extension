@@ -45,10 +45,8 @@ app.innerHTML = '<p class="popup-loading" role="status">Loading Nightfall…</p>
 
 const modeOptions: Array<{ mode: Mode; label: string; title: string }> = [
   { mode: 'original', label: 'Original', title: 'Use the website’s default appearance' },
-  { mode: 'slate-blue', label: 'Slate', title: 'Cooler colors for app-like interfaces' },
-  { mode: 'linear-dark', label: 'Linear', title: 'Deep neutral blacks with cyan-blue accents' },
-  { mode: 'github-dark', label: 'GitHub', title: 'Crisp charcoal surfaces with blue accents' },
-  { mode: 'ai', label: 'AI', title: 'Generate a private, site-aware dark palette with OpenRouter' },
+  { mode: 'dark', label: 'Dark', title: 'Readable dark surfaces that preserve the website’s colors' },
+  { mode: 'ai', label: 'AI', title: 'Generate a dark palette with OpenRouter using aggregate page styles' },
 ];
 
 async function loadAiCredentials(): Promise<void> {
@@ -109,7 +107,7 @@ async function getStatus(): Promise<PerformanceStatus | null> {
   try {
     const response = (await browser.tabs.sendMessage(tabId, {
       type: 'GET_STATUS',
-    })) as ContentResponse | undefined;
+    }, { frameId: 0 })) as ContentResponse | undefined;
     return response?.ok && 'status' in response ? response.status : null;
   } catch {
     return null;
@@ -132,7 +130,7 @@ async function ensureContentScript(): Promise<boolean> {
 async function resetAllowedSites(): Promise<void> {
   const permissions = await browser.permissions.getAll();
   const origins = (permissions.origins ?? []).filter((origin) =>
-    origin.startsWith('http://') || origin.startsWith('https://'),
+    origin !== OPENROUTER_ORIGIN && (origin.startsWith('http://') || origin.startsWith('https://')),
   );
 
   if (!origins.length) return;
@@ -149,7 +147,7 @@ async function applyToPage(next: NightfallSettings): Promise<PerformanceStatus |
     const response = (await browser.tabs.sendMessage(tabId, {
       type: 'APPLY_SETTINGS',
       settings: next,
-    })) as ContentResponse | undefined;
+    }, { frameId: 0 })) as ContentResponse | undefined;
     return response?.ok && 'status' in response ? response.status : null;
   } catch {
     return null;
@@ -177,7 +175,7 @@ function render(status: PerformanceStatus | null) {
   const siteSettings = hostname
     ? getSiteSettings(settings, hostname)
     : getSiteSettings(settings, '');
-  const selectedMode = siteSettings.mode;
+  const selectedMode = siteSettings.enabled ? siteSettings.mode : 'original';
   const pageRepairs = repairsForPath(siteSettings.repairs, pagePath(currentUrl));
   const hasAiTheme = Boolean(siteSettings.aiTheme);
   const showAiSetup = selectedMode === 'ai' || aiSetupOpen;
@@ -198,7 +196,7 @@ function render(status: PerformanceStatus | null) {
 
   app.innerHTML = `
     <header>
-      <div class="mark" aria-hidden="true"><span></span></div>
+      <img class="mark" src="/icon/48.png" width="34" height="34" alt="" />
       <div>
         <h1>Nightfall</h1>
         <p class="site">${hostname || 'This page is protected'}</p>
@@ -214,7 +212,7 @@ function render(status: PerformanceStatus | null) {
           <output id="image-brightness-value" for="image-brightness">${settings.imageBrightness}%</output>
         </div>
         <input id="image-brightness" type="range" min="40" max="100" step="1" value="${settings.imageBrightness}" ${selectedMode === 'original' ? 'disabled' : ''} />
-        ${selectedMode === 'original' ? '<small class="image-brightness-hint">Choose a dark appearance to apply image brightness.</small>' : ''}
+        ${selectedMode === 'original' ? '<small class="image-brightness-hint">Choose Dark or AI to apply image brightness.</small>' : ''}
       </section>
     ` : ''}
 
@@ -230,7 +228,7 @@ function render(status: PerformanceStatus | null) {
           <label class="api-key-label" for="openrouter-key">OpenRouter API key</label>
           <input id="openrouter-key" type="password" autocomplete="off" spellcheck="false" placeholder="sk-or-v1-…" aria-describedby="ai-privacy" />
         `}
-        <p id="ai-privacy">When you generate, Nightfall sends colors, fonts, spacing, layout counts, and semantic element counts—never page text, URLs, selectors, IDs, classes, form values, cookies, or storage.</p>
+        <p id="ai-privacy">Generate sends aggregate colors, font categories, spacing, and element counts to OpenRouter and its selected AI provider. Your API key is sent only to OpenRouter to authenticate the request. Page text, URLs, selectors, IDs, classes, form values, cookies, and browser storage are excluded. <a href="https://nightfall.elyager.com/privacy-policy.html" target="_blank" rel="noreferrer">Privacy policy</a></p>
         <label class="zdr-option">
           <input id="require-zdr" type="checkbox" ${requireZeroDataRetention ? 'checked' : ''} />
           <span><strong>Require zero-data retention</strong><small>Turn this off only if no free ZDR provider is available.</small></span>
@@ -266,7 +264,7 @@ function render(status: PerformanceStatus | null) {
         </button>
         ${pageRepairs.length ? `<button class="clear-fixes" id="clear-fixes" title="Remove saved fixes from this page">Clear</button>` : ''}
       </section>
-      ${selectedMode === 'original' ? '<p class="fix-hint">Choose a dark appearance before fixing elements.</p>' : ''}
+      ${selectedMode === 'original' ? '<p class="fix-hint">Choose Dark or AI before fixing elements.</p>' : ''}
     ` : ''}
 
     ${hasAccess ? '' : `
@@ -285,7 +283,7 @@ function render(status: PerformanceStatus | null) {
       </section>
     ` : ''}
 
-    <footer>No tracking · API key and generated themes stay on this device</footer>
+    <footer>No tracking · Dark mode runs on your device<br /><a href="https://nightfall.elyager.com/privacy-policy.html" target="_blank" rel="noreferrer">Privacy</a> · <a href="https://nightfall.elyager.com/#contact" target="_blank" rel="noreferrer">Support</a></footer>
   `;
 
   bindEvents();
@@ -319,7 +317,7 @@ async function generateAiTheme(): Promise<void> {
     for (let attempt = 0; attempt < 2; attempt += 1) {
       snapshotResponse = (await browser.tabs.sendMessage(tabId, {
         type: 'GET_PAGE_STYLE_SNAPSHOT',
-      }).catch(() => undefined)) as ContentResponse | undefined;
+      }, { frameId: 0 }).catch(() => undefined)) as ContentResponse | undefined;
       if (snapshotResponse?.ok && 'snapshot' in snapshotResponse) break;
       await ensureContentScript();
     }
@@ -337,6 +335,7 @@ async function generateAiTheme(): Promise<void> {
     }
     if (!response.ok || !response.theme) throw new Error(response.ok ? 'No theme was returned.' : response.error);
     const next = updateSiteSettings(settings, hostname, {
+      enabled: true,
       mode: 'ai',
       aiTheme: response.theme,
     });
@@ -363,9 +362,10 @@ function bindEvents() {
         app.querySelector<HTMLInputElement>('#openrouter-key')?.focus();
         return;
       }
-      if (!hostname || mode === getSiteSettings(settings, hostname).mode) return;
+      const site = getSiteSettings(settings, hostname);
+      if (!hostname || (site.enabled && mode === site.mode)) return;
       void persist({
-        ...updateSiteSettings(settings, hostname, { mode }),
+        ...updateSiteSettings(settings, hostname, { mode, enabled: true }),
         mode,
       });
     });
@@ -428,7 +428,7 @@ function bindEvents() {
     try {
       const response = (await browser.tabs.sendMessage(tabId, {
         type: 'START_ELEMENT_PICKER',
-      })) as ContentResponse | undefined;
+      }, { frameId: 0 })) as ContentResponse | undefined;
       if (response?.ok) window.close();
     } catch {
       await refreshStatus();

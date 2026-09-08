@@ -5,7 +5,9 @@ import {
   type ContentResponse,
 } from '@/utils/messages';
 import { sitePermissionPattern } from '@/utils/permissions';
-import { getSiteSettings, loadSettings, saveSettings, updateSiteSettings } from '@/utils/settings';
+import { loadSettings, saveSettings, toggleSiteSettings } from '@/utils/settings';
+import { BOOTSTRAP_ID_PREFIX, getBootstrapRegistrations } from '@/utils/bootstrap';
+import { PROPERTY_OVERRIDES_CSS } from '@/utils/property-overrides';
 import {
   createAiThemeRequest,
   AI_LOGS_KEY,
@@ -24,11 +26,6 @@ interface DevServerMessage {
 
 export default defineBackground(() => {
   const scriptId = 'nightfall-engine';
-  const bootstrapScripts = [
-    { id: 'nightfall-bootstrap-slate-blue', mode: 'slate-blue', css: '/bootstrap/slate-blue.css' },
-    { id: 'nightfall-bootstrap-linear-dark', mode: 'linear-dark', css: '/bootstrap/linear-dark.css' },
-    { id: 'nightfall-bootstrap-github-dark', mode: 'github-dark', css: '/bootstrap/github-dark.css' },
-  ] as const;
   let registrationQueue: Promise<void> = Promise.resolve();
   let pendingPopupReopen: {
     tabId: number;
@@ -60,10 +57,8 @@ export default defineBackground(() => {
       .filter((origin) => origin.startsWith('http://') || origin.startsWith('https://'))
       .filter((origin) => origin !== OPENROUTER_ORIGIN)
       .sort();
-    const registrationIds = [scriptId, ...bootstrapScripts.map(({ id }) => id)];
-    const existing = await browser.scripting.getRegisteredContentScripts({
-      ids: registrationIds,
-    });
+    const existing = (await browser.scripting.getRegisteredContentScripts())
+      .filter(({ id }) => id === scriptId || id.startsWith(BOOTSTRAP_ID_PREFIX));
     const existingIds = new Set(existing.map(({ id }) => id));
 
     if (!origins.length) {
@@ -89,35 +84,19 @@ export default defineBackground(() => {
       await browser.scripting.updateContentScripts([registration]);
     }
 
-    for (const bootstrap of bootstrapScripts) {
-      const matches = origins.filter((origin) => {
-        try {
-          const hostname = new URL(origin.replace('*.', '')).hostname;
-          const site = getSiteSettings(settings, hostname);
-          return site.enabled && site.mode === bootstrap.mode;
-        } catch {
-          return false;
-        }
-      });
-      if (!matches.length) {
-        if (existingIds.has(bootstrap.id)) {
-          await browser.scripting.unregisterContentScripts({ ids: [bootstrap.id] });
-        }
-        continue;
-      }
-      const bootstrapRegistration = {
-        id: bootstrap.id,
-        css: [bootstrap.css],
-        matches,
-        runAt: 'document_start' as const,
-        allFrames: true,
-        matchOriginAsFallback: true,
-        persistAcrossSessions: true,
-      };
-      if (existingIds.has(bootstrap.id)) {
-        await browser.scripting.updateContentScripts([bootstrapRegistration]);
+    const bootstraps = getBootstrapRegistrations(origins, settings);
+    const desiredIds = new Set(bootstraps.map(({ id }) => id));
+    const obsolete = existing
+      .filter(({ id }) => id !== scriptId && !desiredIds.has(id))
+      .map(({ id }) => id);
+    if (obsolete.length) {
+      await browser.scripting.unregisterContentScripts({ ids: obsolete });
+    }
+    for (const registration of bootstraps) {
+      if (existingIds.has(registration.id)) {
+        await browser.scripting.updateContentScripts([registration]);
       } else {
-        await browser.scripting.registerContentScripts([bootstrapRegistration]);
+        await browser.scripting.registerContentScripts([registration]);
       }
     }
   };
@@ -132,7 +111,7 @@ export default defineBackground(() => {
     try {
       const response = (await browser.tabs.sendMessage(tabId, {
         type: 'GET_STATUS',
-      })) as ContentResponse | undefined;
+      }, { frameId: 0 })) as ContentResponse | undefined;
       return response?.ok === true && response.protocolVersion === CONTENT_PROTOCOL_VERSION;
     } catch {
       return false;
@@ -225,7 +204,38 @@ export default defineBackground(() => {
   });
 
   browser.runtime.onMessage.addListener(
-    (message: BackgroundMessage, _sender, sendResponse) => {
+    (message: BackgroundMessage, sender, sendResponse) => {
+      if (message?.type === 'INSTALL_THEME_OVERRIDES') {
+        void (async () => {
+          try {
+            const tabId = sender.tab?.id;
+            const frameId = sender.frameId;
+            if (sender.id !== browser.runtime.id || tabId == null || frameId == null) {
+              throw new Error('Nightfall can only install theme overrides in its requesting page');
+            }
+            const pattern = sitePermissionPattern(sender.url ?? sender.tab?.url ?? '');
+            if (!pattern || !(await browser.permissions.contains({ origins: [pattern] }))) {
+              throw new Error('Nightfall does not have access to this frame');
+            }
+            const injection = {
+              target: { tabId, frameIds: [frameId] },
+              css: PROPERTY_OVERRIDES_CSS,
+              origin: 'USER' as const,
+            };
+            // Repeated content-script initialization replaces the same fixed CSS.
+            await browser.scripting.removeCSS(injection);
+            await browser.scripting.insertCSS(injection);
+            sendResponse({ ok: true } satisfies BackgroundResponse);
+          } catch (error: unknown) {
+            sendResponse({
+              ok: false,
+              error: error instanceof Error ? error.message : 'Unable to install theme overrides',
+            } satisfies BackgroundResponse);
+          }
+        })();
+        return true;
+      }
+
       if (message?.type === 'ARM_POPUP_REOPEN') {
         pendingPopupReopen = {
           tabId: message.tabId,
@@ -356,11 +366,8 @@ export default defineBackground(() => {
     if (!['http:', 'https:'].includes(url.protocol)) return;
 
     const settings = await loadSettings();
-    const site = getSiteSettings(settings, url.hostname);
     const next = {
-      ...updateSiteSettings(settings, url.hostname, {
-        enabled: !site.enabled,
-      }),
+      ...toggleSiteSettings(settings, url.hostname),
       revision: settings.revision + 1,
     };
     await saveSettings(next);
@@ -368,6 +375,6 @@ export default defineBackground(() => {
     await browser.tabs.sendMessage(tab.id, {
       type: 'APPLY_SETTINGS',
       settings: next,
-    });
+    }, { frameId: 0 });
   });
 });

@@ -1,4 +1,5 @@
 import {
+  composite,
   contrastRatio,
   luminance,
   parseHex,
@@ -21,29 +22,62 @@ import {
   type ThemePalette,
 } from './theme';
 import { detectNativeDark } from './native-dark';
+import { createBaseCss } from './engine-styles';
 import { pagePath, repairsForPath } from './repairs';
 import { collectPageStyleSnapshot, type PageStyleSnapshot } from './ai-theme';
+import { clearComputedColorCache, parseComputedColor } from './css-color';
 
 const BOOTSTRAP_ID = 'nightfall-bootstrap';
 const STYLE_ID = 'nightfall-styles';
 const BATCH_SIZE = 80;
 const MEDIA_SELECTOR = 'img, video, canvas, picture, iframe, object, embed, svg';
-const NON_IMAGE_MEDIA_SELECTOR = 'video, canvas, picture, iframe, object, embed, svg';
 const IMAGE_BACKED_TEXT_CLASS = 'nightfall-image-backed-text';
+const IMAGE_OVERLAY_CLASS = 'nightfall-image-overlay';
 const IMAGE_BRIGHTNESS_CLASS = 'nightfall-image-brightened';
 const ADAPTED_BACKGROUND_CLASS = 'nightfall-adapted-background';
 const ADAPTED_FOREGROUND_CLASS = 'nightfall-adapted-foreground';
 const ADAPTED_BORDER_CLASS = 'nightfall-adapted-border';
 const ACCENT_BACKGROUND_CLASS = 'nightfall-accent-background';
+const IMAGE_OVERLAY_CONTAINER_SELECTOR = '[data-dram-node-role="PainterContentContainer"]';
 
 export const NIGHTFALL_OBSERVER_OPTIONS: MutationObserverInit = {
   childList: true,
   subtree: true,
+  attributes: true,
+  attributeFilter: ['class', 'style', 'hidden', 'open', 'disabled', 'aria-expanded', 'aria-selected'],
 };
 
 interface BackgroundLayer {
   image: string;
   color: Rgb | null;
+}
+
+interface StyleSnapshot {
+  display: string;
+  visibility: string;
+  backgroundColor: string;
+  color: string;
+  borderTopColor: string;
+  backgroundImage: string;
+  boxShadow: string;
+  position: string;
+  fontSize: string;
+  fontWeight: string;
+  borderRadius: string;
+  filter: string;
+  opacity: string;
+}
+
+type StyleCache = WeakMap<HTMLElement, StyleSnapshot>;
+type ImageCache = WeakMap<Element, HTMLImageElement[]>;
+
+interface RectLike {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+  width: number;
+  height: number;
 }
 
 interface AccentBackgroundContext {
@@ -74,180 +108,34 @@ export function shouldPreserveAccentBackground(
   return chroma >= 36 && saturation >= 0.28;
 }
 
-export function createBaseCss(
-  palette: ThemePalette,
-  imageBrightness = 100,
-): string {
-  return `
-html[data-nightfall="active"] {
-  color-scheme: dark !important;
-  background-color: ${palette.pageBackground} !important;
-  --nightfall-image-brightness: ${imageBrightness / 100};
+export function hasSignificantImageOverlayOverlap(
+  overlayRect: RectLike,
+  imageRect: RectLike,
+): boolean {
+  const left = Math.max(overlayRect.left, imageRect.left);
+  const top = Math.max(overlayRect.top, imageRect.top);
+  const right = Math.min(overlayRect.right, imageRect.right);
+  const bottom = Math.min(overlayRect.bottom, imageRect.bottom);
+  const intersectionArea = Math.max(0, right - left) * Math.max(0, bottom - top);
+  const overlayArea = Math.max(0, overlayRect.width * overlayRect.height);
+  const imageArea = Math.max(0, imageRect.width * imageRect.height);
+
+  if (intersectionArea === 0 || overlayArea === 0 || imageArea === 0) {
+    return false;
+  }
+
+  // Require most of the candidate overlay to sit over the image, while still
+  // allowing the image to be slightly smaller than its containing layer.
+  return intersectionArea / overlayArea >= 0.5 && intersectionArea / imageArea >= 0.25;
 }
-html[data-nightfall="active"] body {
-  background-color: transparent !important;
-  color: ${palette.textPrimary} !important;
-}
-html[data-nightfall="active"] input,
-html[data-nightfall="active"] textarea,
-html[data-nightfall="active"] select {
-  background-color: ${palette.controlBackground} !important;
-  border-color: ${palette.border} !important;
-}
-html[data-nightfall="active"] input:not(.${IMAGE_BACKED_TEXT_CLASS}),
-html[data-nightfall="active"] textarea:not(.${IMAGE_BACKED_TEXT_CLASS}),
-html[data-nightfall="active"] select:not(.${IMAGE_BACKED_TEXT_CLASS}) {
-  color: ${palette.textPrimary} !important;
-}
-html[data-nightfall="active"] input:hover,
-html[data-nightfall="active"] textarea:hover,
-html[data-nightfall="active"] select:hover {
-  background-color: ${palette.controlHover} !important;
-}
-html[data-nightfall="active"] input:active,
-html[data-nightfall="active"] textarea:active,
-html[data-nightfall="active"] select:active {
-  background-color: ${palette.controlActive} !important;
-}
-html[data-nightfall="active"] input:disabled,
-html[data-nightfall="active"] textarea:disabled,
-html[data-nightfall="active"] select:disabled {
-  background-color: ${palette.controlDisabled} !important;
-}
-html[data-nightfall="active"] input:disabled:not(.${IMAGE_BACKED_TEXT_CLASS}),
-html[data-nightfall="active"] textarea:disabled:not(.${IMAGE_BACKED_TEXT_CLASS}),
-html[data-nightfall="active"] select:disabled:not(.${IMAGE_BACKED_TEXT_CLASS}) {
-  color: ${palette.textDisabled} !important;
-}
-html[data-nightfall="active"] :focus-visible {
-  outline: 2px solid ${palette.focusRing} !important;
-  outline-offset: 2px !important;
-}
-html[data-nightfall="active"] a:not(.${IMAGE_BACKED_TEXT_CLASS}) { color: ${palette.link} !important; }
-html[data-nightfall="active"] a:not(.${IMAGE_BACKED_TEXT_CLASS}):hover { color: ${palette.linkHover} !important; text-decoration: underline; }
-html[data-nightfall="active"] a:not(.${IMAGE_BACKED_TEXT_CLASS}):visited { color: ${palette.linkVisited} !important; }
-html[data-nightfall="active"] ::placeholder { color: ${palette.textMuted} !important; opacity: 1; }
-html[data-nightfall="active"] ::selection { background: ${palette.selectionBackground}; color: ${palette.selectionText}; }
-html[data-nightfall="active"] dialog,
-html[data-nightfall="active"] [role="dialog"],
-html[data-nightfall="active"] [role="menu"],
-html[data-nightfall="active"] [role="listbox"],
-html[data-nightfall="active"] .dropdown-menu,
-html[data-nightfall="active"] .sub-menu,
-html[data-nightfall="active"] .submenu,
-html[data-nightfall="active"] [popover] {
-  background-color: ${palette.elevatedSurface} !important;
-  color: ${palette.textPrimary} !important;
-  border-color: ${palette.border} !important;
-  box-shadow: 0 1px 2px ${palette.shadow}, 0 8px 24px ${palette.shadow} !important;
-}
-html[data-nightfall="active"] [role="menuitem"],
-html[data-nightfall="active"] .dropdown-item,
-html[data-nightfall="active"] .sub-menu > li > a,
-html[data-nightfall="active"] .submenu > li > a {
-  background-color: transparent !important;
-}
-html[data-nightfall="active"] [role="menuitem"]:not(.${IMAGE_BACKED_TEXT_CLASS}),
-html[data-nightfall="active"] .dropdown-item:not(.${IMAGE_BACKED_TEXT_CLASS}),
-html[data-nightfall="active"] .sub-menu > li > a:not(.${IMAGE_BACKED_TEXT_CLASS}),
-html[data-nightfall="active"] .submenu > li > a:not(.${IMAGE_BACKED_TEXT_CLASS}) {
-  color: ${palette.textPrimary} !important;
-}
-html[data-nightfall="active"] [role="menuitem"]:hover,
-html[data-nightfall="active"] [role="menuitem"]:focus,
-html[data-nightfall="active"] .dropdown-item:hover,
-html[data-nightfall="active"] .dropdown-item:focus,
-html[data-nightfall="active"] .sub-menu > li > a:hover,
-html[data-nightfall="active"] .sub-menu > li > a:focus,
-html[data-nightfall="active"] .submenu > li > a:hover,
-html[data-nightfall="active"] .submenu > li > a:focus {
-  background-color: ${palette.controlHover} !important;
-  color: ${palette.textPrimary} !important;
-  -webkit-text-fill-color: ${palette.textPrimary} !important;
-  text-decoration: none;
-}
-html[data-nightfall="active"] button:not(.${ACCENT_BACKGROUND_CLASS}):not(.${IMAGE_BACKED_TEXT_CLASS}):hover,
-html[data-nightfall="active"] button:not(.${ACCENT_BACKGROUND_CLASS}):not(.${IMAGE_BACKED_TEXT_CLASS}):focus-visible,
-html[data-nightfall="active"] [role="button"]:not(.${ACCENT_BACKGROUND_CLASS}):not(.${IMAGE_BACKED_TEXT_CLASS}):hover,
-html[data-nightfall="active"] [role="button"]:not(.${ACCENT_BACKGROUND_CLASS}):not(.${IMAGE_BACKED_TEXT_CLASS}):focus-visible,
-html[data-nightfall="active"] [role="tab"]:not(.${ACCENT_BACKGROUND_CLASS}):not(.${IMAGE_BACKED_TEXT_CLASS}):hover,
-html[data-nightfall="active"] [role="tab"]:not(.${ACCENT_BACKGROUND_CLASS}):not(.${IMAGE_BACKED_TEXT_CLASS}):focus-visible,
-html[data-nightfall="active"] [role="option"]:not(.${ACCENT_BACKGROUND_CLASS}):not(.${IMAGE_BACKED_TEXT_CLASS}):hover,
-html[data-nightfall="active"] [role="option"]:not(.${ACCENT_BACKGROUND_CLASS}):not(.${IMAGE_BACKED_TEXT_CLASS}):focus-visible,
-html[data-nightfall="active"] [role="treeitem"]:not(.${ACCENT_BACKGROUND_CLASS}):not(.${IMAGE_BACKED_TEXT_CLASS}):hover,
-html[data-nightfall="active"] [role="treeitem"]:not(.${ACCENT_BACKGROUND_CLASS}):not(.${IMAGE_BACKED_TEXT_CLASS}):focus-visible,
-html[data-nightfall="active"] summary:not(.${ACCENT_BACKGROUND_CLASS}):not(.${IMAGE_BACKED_TEXT_CLASS}):hover,
-html[data-nightfall="active"] summary:not(.${ACCENT_BACKGROUND_CLASS}):not(.${IMAGE_BACKED_TEXT_CLASS}):focus-visible {
-  background-color: ${palette.controlHover} !important;
-  border-color: ${palette.border} !important;
-  color: ${palette.textPrimary} !important;
-  -webkit-text-fill-color: ${palette.textPrimary} !important;
-}
-html[data-nightfall="active"] [role="menuitem"]:hover :not(.${IMAGE_BACKED_TEXT_CLASS}),
-html[data-nightfall="active"] [role="menuitem"]:focus :not(.${IMAGE_BACKED_TEXT_CLASS}),
-html[data-nightfall="active"] .dropdown-item:hover :not(.${IMAGE_BACKED_TEXT_CLASS}),
-html[data-nightfall="active"] .dropdown-item:focus :not(.${IMAGE_BACKED_TEXT_CLASS}),
-html[data-nightfall="active"] .sub-menu > li > a:hover :not(.${IMAGE_BACKED_TEXT_CLASS}),
-html[data-nightfall="active"] .sub-menu > li > a:focus :not(.${IMAGE_BACKED_TEXT_CLASS}),
-html[data-nightfall="active"] .submenu > li > a:hover :not(.${IMAGE_BACKED_TEXT_CLASS}),
-html[data-nightfall="active"] .submenu > li > a:focus :not(.${IMAGE_BACKED_TEXT_CLASS}),
-html[data-nightfall="active"] button:not(.${ACCENT_BACKGROUND_CLASS}):hover :not(.${IMAGE_BACKED_TEXT_CLASS}),
-html[data-nightfall="active"] button:not(.${ACCENT_BACKGROUND_CLASS}):focus-visible :not(.${IMAGE_BACKED_TEXT_CLASS}),
-html[data-nightfall="active"] [role="button"]:not(.${ACCENT_BACKGROUND_CLASS}):hover :not(.${IMAGE_BACKED_TEXT_CLASS}),
-html[data-nightfall="active"] [role="button"]:not(.${ACCENT_BACKGROUND_CLASS}):focus-visible :not(.${IMAGE_BACKED_TEXT_CLASS}),
-html[data-nightfall="active"] [role="tab"]:not(.${ACCENT_BACKGROUND_CLASS}):hover :not(.${IMAGE_BACKED_TEXT_CLASS}),
-html[data-nightfall="active"] [role="tab"]:not(.${ACCENT_BACKGROUND_CLASS}):focus-visible :not(.${IMAGE_BACKED_TEXT_CLASS}),
-html[data-nightfall="active"] [role="option"]:not(.${ACCENT_BACKGROUND_CLASS}):hover :not(.${IMAGE_BACKED_TEXT_CLASS}),
-html[data-nightfall="active"] [role="option"]:not(.${ACCENT_BACKGROUND_CLASS}):focus-visible :not(.${IMAGE_BACKED_TEXT_CLASS}),
-html[data-nightfall="active"] [role="treeitem"]:not(.${ACCENT_BACKGROUND_CLASS}):hover :not(.${IMAGE_BACKED_TEXT_CLASS}),
-html[data-nightfall="active"] [role="treeitem"]:not(.${ACCENT_BACKGROUND_CLASS}):focus-visible :not(.${IMAGE_BACKED_TEXT_CLASS}),
-html[data-nightfall="active"] summary:not(.${ACCENT_BACKGROUND_CLASS}):hover :not(.${IMAGE_BACKED_TEXT_CLASS}),
-html[data-nightfall="active"] summary:not(.${ACCENT_BACKGROUND_CLASS}):focus-visible :not(.${IMAGE_BACKED_TEXT_CLASS}) {
-  color: ${palette.textPrimary} !important;
-  -webkit-text-fill-color: ${palette.textPrimary} !important;
-}
-html[data-nightfall="active"] .${ADAPTED_BACKGROUND_CLASS} {
-  background-color: var(--nightfall-element-bg) !important;
-}
-html[data-nightfall="active"] .${ADAPTED_BORDER_CLASS} {
-  border-color: var(--nightfall-element-border) !important;
-}
-html[data-nightfall="active"] .${ADAPTED_FOREGROUND_CLASS}:not(.${IMAGE_BACKED_TEXT_CLASS}) {
-  color: var(--nightfall-element-fg) !important;
-}
-html[data-nightfall="active"] [data-nightfall-repair="true"] {
-  background-color: var(--nightfall-element-bg) !important;
-  color: var(--nightfall-element-fg) !important;
-  border-color: var(--nightfall-element-border) !important;
-}
-html[data-nightfall="active"] .${IMAGE_BRIGHTNESS_CLASS} {
-  filter: var(--nightfall-original-image-filter, brightness(1)) brightness(var(--nightfall-image-brightness, 1)) !important;
-}
-html[data-nightfall="active"] ${NON_IMAGE_MEDIA_SELECTOR.split(', ').join(',\nhtml[data-nightfall="active"] ')} {
-  filter: none !important;
-  mix-blend-mode: normal !important;
-}
-html[data-nightfall="active"]::-webkit-scrollbar-track { background: ${palette.scrollbarTrack}; }
-html[data-nightfall="active"]::-webkit-scrollbar-thumb { background: ${palette.scrollbarThumb}; }
-html[data-nightfall="active"]::-webkit-scrollbar-thumb:hover { background: ${palette.scrollbarThumbHover}; }
-html[data-nightfall-transition="active"],
-html[data-nightfall-transition="active"] body,
-html[data-nightfall-transition="active"] .nightfall-adapted,
-html[data-nightfall-transition="active"] input,
-html[data-nightfall-transition="active"] textarea,
-html[data-nightfall-transition="active"] select,
-html[data-nightfall-transition="active"] button {
-  transition: background-color 160ms ease, color 160ms ease, border-color 160ms ease !important;
-}
-`;
-}
+
 
 function removeBootstrap(): void {
   document.getElementById(BOOTSTRAP_ID)?.remove();
   document.documentElement.dataset.nightfallBootstrap = 'off';
 }
 
-function isLargeText(style: CSSStyleDeclaration): boolean {
+function isLargeText(style: StyleSnapshot): boolean {
   const size = Number.parseFloat(style.fontSize);
   const weight = Number.parseInt(style.fontWeight, 10) || 400;
   return size >= 24 || (size >= 18.66 && weight >= 700);
@@ -281,7 +169,15 @@ export class NightfallEngine {
   private settings!: NightfallSettings;
   private mode: NightfallSettings['mode'] = 'original';
   private readonly hostname = location.hostname;
-  private readonly startedAt = performance.now();
+  private startedAt = performance.now();
+  private queueIndex = 0;
+  private readonly refreshStyles = () => {
+    if (this.adaptive) this.enqueue(document.documentElement);
+  };
+  private readonly refreshInteraction = (event: Event) => {
+    if (!this.adaptive || !(event.target instanceof Element)) return;
+    this.enqueue(event.target);
+  };
   private observer?: MutationObserver;
   private queue: Element[] = [];
   private queued = new WeakSet<Element>();
@@ -302,7 +198,7 @@ export class NightfallEngine {
 
   async start(settings?: NightfallSettings): Promise<void> {
     const generation = ++this.generation;
-    const userInitiated = settings !== undefined;
+    this.startedAt = performance.now();
     const nextSettings = settings ?? (await loadSettings());
     if (generation !== this.generation) return;
     this.settings = nextSettings;
@@ -312,12 +208,10 @@ export class NightfallEngine {
     this.mode = site.mode;
     const shouldRun = site.enabled;
     const switchingPalette =
-      shouldRun && document.documentElement.dataset.nightfall === 'active';
-    // Tear down the previous palette before reading computed styles for the next
-    // one. Keeping the old stylesheet active makes the adaptive pass transform
-    // already-transformed colors and also prevents Original from fully restoring
-    // the page when this method returns early below.
-    this.stop(false);
+      shouldRun && site.mode !== 'original' && document.documentElement.dataset.nightfall === 'active';
+    // Keep adapted surfaces painted during dark-to-dark switches. The next
+    // batch reads through our stylesheet, so it never reuses transformed colors.
+    this.teardown(false, switchingPalette);
     this.currentPath = pagePath(location.href);
     const nativeDark = switchingPalette
       ? this.status.nativeDark
@@ -344,12 +238,10 @@ export class NightfallEngine {
 
     removeBootstrap();
     this.palette = getThemePreset(this.mode, site.aiTheme);
-    if (userInitiated && switchingPalette) this.enableTransition();
     this.installStyles();
     document.documentElement.dataset.nightfall = 'active';
     document.documentElement.dataset.nightfallTheme = this.palette.id;
     this.markStoredRepairs(document.documentElement);
-    if (userInitiated && !switchingPalette) this.enableTransition();
     this.status = {
       ...this.emptyStatus('fast'),
       active: true,
@@ -362,23 +254,36 @@ export class NightfallEngine {
     if (generation !== this.generation) return;
     await nextFrame();
     if (generation !== this.generation) return;
-    this.enableAdaptive(document.body);
+    this.enableAdaptive(document.documentElement);
   }
 
   stop(removeBootstrapLayer = true): void {
+    ++this.generation;
+    this.teardown(removeBootstrapLayer);
+    this.status = this.emptyStatus('off');
+  }
+
+  private teardown(removeBootstrapLayer = true, keepAdaptations = false): void {
+    document.removeEventListener('load', this.onStylesheetLoad, true);
+    window.removeEventListener('resize', this.refreshStyles);
+    for (const event of ['pointerover', 'pointerout', 'focusin', 'focusout']) {
+      document.removeEventListener(event, this.refreshInteraction, true);
+    }
     this.observer?.disconnect();
     this.observer = undefined;
     this.queue = [];
+    this.queueIndex = 0;
     this.queued = new WeakSet<Element>();
     this.scheduled = false;
     this.adaptive = false;
     this.colorCache.clear();
+    clearComputedColorCache();
     document.documentElement.removeAttribute('data-nightfall');
     document.documentElement.removeAttribute('data-nightfall-theme');
     document.documentElement.removeAttribute('data-nightfall-transition');
     document.getElementById(STYLE_ID)?.remove();
-    document.querySelectorAll<HTMLElement>(`.nightfall-adapted, .${IMAGE_BACKED_TEXT_CLASS}, .${IMAGE_BRIGHTNESS_CLASS}`).forEach((element) => {
-      this.clearAdaptation(element);
+    document.querySelectorAll<HTMLElement>(`.nightfall-adapted, .${IMAGE_BACKED_TEXT_CLASS}, .${IMAGE_OVERLAY_CLASS}, .${IMAGE_BRIGHTNESS_CLASS}`).forEach((element) => {
+      if (!keepAdaptations) this.clearAdaptation(element);
     });
     document.querySelectorAll<HTMLElement>('[data-nightfall-repair]').forEach((element) => {
       element.removeAttribute('data-nightfall-repair');
@@ -391,14 +296,28 @@ export class NightfallEngine {
   }
 
   async collectOriginalPageStyleSnapshot(): Promise<PageStyleSnapshot> {
-    const wasActive = document.documentElement.dataset.nightfall === 'active';
-    if (!wasActive) return collectPageStyleSnapshot();
-    this.stop(false);
-    await nextFrame();
+    // Sample synchronously: restoring styles before yielding prevents an AI
+    // snapshot from flashing the original page or restarting a disposed engine.
+    this.observer?.disconnect();
     try {
-      return collectPageStyleSnapshot();
+      return this.withOriginalStyles(collectPageStyleSnapshot);
     } finally {
-      await this.start(this.settings);
+      this.observeDocument();
+    }
+  }
+
+  private withOriginalStyles<T>(read: () => T): T {
+    const root = document.documentElement;
+    const active = root.getAttribute('data-nightfall');
+    const sheet = document.getElementById(STYLE_ID) as HTMLStyleElement | null;
+    const disabled = sheet?.disabled ?? false;
+    if (sheet) sheet.disabled = true;
+    root.removeAttribute('data-nightfall');
+    try {
+      return read();
+    } finally {
+      if (sheet) sheet.disabled = disabled;
+      if (active !== null) root.setAttribute('data-nightfall', active);
     }
   }
 
@@ -439,25 +358,40 @@ export class NightfallEngine {
     };
   }
 
-  private enableTransition(): void {
-    document.documentElement.dataset.nightfallTransition = 'active';
-    window.setTimeout(() => {
-      document.documentElement.removeAttribute('data-nightfall-transition');
-    }, 180);
-  }
+  private readonly onStylesheetLoad = (event: Event) => {
+    if (event.target instanceof HTMLLinkElement && event.target.rel === 'stylesheet') {
+      this.refreshStyles();
+    }
+  };
 
   private observe(): void {
     this.observer = new MutationObserver((mutations) => {
       this.syncNavigation();
       for (const mutation of mutations) {
+        const target = mutation.target;
+        if (target instanceof Element && isExtensionElement(target)) continue;
+        if (target instanceof HTMLStyleElement) {
+          this.refreshStyles();
+          continue;
+        }
+        if (mutation.type === 'attributes' && target instanceof Element) {
+          if (this.adaptive) this.enqueue(target);
+          continue;
+        }
         for (const node of mutation.addedNodes) {
           if (!(node instanceof Element) || isExtensionElement(node)) continue;
           this.markStoredRepairs(node);
-          if (this.adaptive) this.enqueue(node);
+          if (node instanceof HTMLStyleElement) this.refreshStyles();
+          else if (this.adaptive) this.enqueue(node);
         }
       }
     });
     this.observeDocument();
+    document.addEventListener('load', this.onStylesheetLoad, true);
+    window.addEventListener('resize', this.refreshStyles);
+    for (const event of ['pointerover', 'pointerout', 'focusin', 'focusout']) {
+      document.addEventListener(event, this.refreshInteraction, true);
+    }
   }
 
   private observeDocument(): void {
@@ -474,47 +408,74 @@ export class NightfallEngine {
     if (this.queued.has(element) || isExtensionElement(element)) return;
     this.queued.add(element);
     this.queue.push(element);
-    this.scheduleBatch(immediate);
+    if (this.adaptive) this.scheduleBatch(immediate);
   }
 
   private scheduleBatch(immediate = false): void {
     if (this.scheduled) return;
     this.scheduled = true;
+    const generation = this.generation;
     const run = () => {
+      if (generation !== this.generation) return;
       this.scheduled = false;
+      if (!this.adaptive) return;
       this.processBatch();
     };
-    if (immediate) {
-      queueMicrotask(run);
-    } else if ('requestIdleCallback' in window) {
-      requestIdleCallback(run, { timeout: 120 });
-    } else {
-      setTimeout(run, 16);
-    }
+    if (immediate) queueMicrotask(run);
+    else if ('requestIdleCallback' in window) requestIdleCallback(run, { timeout: 120 });
+    else setTimeout(run, 16);
   }
 
   private processBatch(): void {
-    let count = 0;
     const observer = this.observer;
+    const styleCache: StyleCache = new WeakMap();
+    const imageCache: ImageCache = new WeakMap();
+    const elements: Element[] = [];
     observer?.disconnect();
     try {
-      while (this.queue.length && count < BATCH_SIZE) {
-        const element = this.queue.shift()!;
+      // A queue cursor avoids repeatedly shifting every remaining DOM node.
+      while (this.queueIndex < this.queue.length && elements.length < BATCH_SIZE) {
+        const element = this.queue[this.queueIndex++]!;
         this.queued.delete(element);
-        this.processElement(element);
-        for (const child of element.children) this.enqueue(child);
-        count += 1;
+        if (!element.isConnected || isExtensionElement(element)) continue;
+        elements.push(element);
+        for (const child of element.children) {
+          if (!this.queued.has(child) && !isExtensionElement(child)) {
+            this.queued.add(child);
+            this.queue.push(child);
+          }
+        }
       }
+      // Read authored colors in one synchronous phase. Otherwise a previously
+      // adapted parent (or our base link/input CSS) contaminates the next read.
+      this.withOriginalStyles(() => {
+        for (const element of elements) {
+          let current = element instanceof HTMLElement ? element : element.parentElement;
+          while (current && !styleCache.has(current)) {
+            this.readStyle(current, styleCache);
+            current = current.parentElement;
+          }
+        }
+      });
+      for (const element of elements) this.processElement(element, styleCache, imageCache);
     } finally {
       if (observer && this.observer === observer) this.observeDocument();
     }
-    this.status.processedNodes += count;
-    if (this.queue.length) this.scheduleBatch();
+    this.status.processedNodes += elements.length;
+    if (this.queueIndex < this.queue.length) this.scheduleBatch();
+    else {
+      this.queue = [];
+      this.queueIndex = 0;
+    }
   }
 
-  private processElement(element: Element): void {
+  private processElement(
+    element: Element,
+    styleCache: StyleCache,
+    imageCache: ImageCache,
+  ): void {
     if (element instanceof HTMLImageElement) {
-      this.adaptImageBrightness(element);
+      this.adaptImageBrightness(element, styleCache);
       return;
     }
     if (
@@ -526,24 +487,35 @@ export class NightfallEngine {
     }
 
     this.clearAdaptation(element);
-    let style = getComputedStyle(element);
-    if (style.display === 'none' || style.visibility === 'hidden') return;
-
-    const preserveForeground = this.isOverBackgroundImage(element);
-    if (preserveForeground) {
-      element.classList.add(IMAGE_BACKED_TEXT_CLASS);
-      // Removing Nightfall's broad link/control color rules exposes the
-      // page-authored foreground before the rest of this pass reads it.
-      style = getComputedStyle(element);
-    }
+    const style = this.readStyle(element, styleCache);
+    // Hidden menus and tooltips also need colors before CSS-only hover reveals.
 
     const background = parseRgb(style.backgroundColor);
+    const forced = element.getAttribute('data-nightfall-repair') === 'true';
+    const imageOverlay = !forced && this.isImageOverlay(
+      element,
+      style,
+      background,
+      styleCache,
+      imageCache,
+    );
+    if (imageOverlay) element.classList.add(IMAGE_OVERLAY_CLASS);
+    const preserveForeground = imageOverlay || this.isOverBackgroundImage(
+      element,
+      style,
+      background,
+      styleCache,
+    );
+    if (preserveForeground) {
+      element.classList.add(IMAGE_BACKED_TEXT_CLASS);
+      element.style.setProperty('--nightfall-original-fg', style.color);
+    }
+
     const foreground = parseRgb(style.color);
     const border = parseRgb(style.borderTopColor);
     const hasImage = style.backgroundImage !== 'none';
     let transformedBackground: Rgb | null = null;
     const level = this.classifySurface(element, style, background);
-    const forced = element.getAttribute('data-nightfall-repair') === 'true';
     const preserveAccentBackground = shouldPreserveAccentBackground(background, {
       interactive: this.isInteractive(element),
       badgeLike: this.isBadgeLike(element, style),
@@ -559,7 +531,7 @@ export class NightfallEngine {
       // site control. Retain the color locally so foreground contrast is still
       // checked against the actual accent rather than an ancestor surface.
       transformedBackground = background;
-    } else if (background && background.a > 0.65 && !hasImage) {
+    } else if (!imageOverlay && background && background.a > 0 && !hasImage) {
       const key = `bg:${this.palette.id}:${level}:${style.backgroundColor}`;
       const value = this.cachedColor(key, () => {
         transformedBackground = transformBackground(
@@ -573,10 +545,10 @@ export class NightfallEngine {
       element.style.setProperty('--nightfall-element-bg', value);
     }
 
-    const effectiveBackground =
-      transformedBackground ??
-      this.findEffectiveBackground(element.parentElement) ??
-      parseHex(this.palette.pageBackground);
+    const parentBackground = this.findEffectiveBackground(element.parentElement, styleCache);
+    const effectiveBackground = transformedBackground
+      ? composite(transformedBackground, parentBackground)
+      : parentBackground;
     if (forced) {
       element.style.setProperty('--nightfall-element-fg', this.palette.textPrimary);
     } else if (!preserveForeground && foreground && (transformedBackground || contrastRatio(foreground, effectiveBackground) < 4.5)) {
@@ -629,6 +601,7 @@ export class NightfallEngine {
     const cached = this.colorCache.get(key);
     if (cached) return cached;
     const value = create();
+    if (this.colorCache.size >= 4096) this.colorCache.clear();
     this.colorCache.set(key, value);
     return value;
   }
@@ -658,34 +631,197 @@ export class NightfallEngine {
     }
   }
 
-  private findEffectiveBackground(element: HTMLElement | null): Rgb | null {
+  private readStyle(element: HTMLElement, styleCache: StyleCache): StyleSnapshot {
+    const cached = styleCache.get(element);
+    if (cached) return cached;
+
+    const style = getComputedStyle(element);
+    const normalizedColor = (value: string) => {
+      const color = parseComputedColor(value);
+      return color ? toCss(color) : value;
+    };
+    const snapshot: StyleSnapshot = {
+      display: style.display,
+      visibility: style.visibility,
+      backgroundColor: normalizedColor(style.backgroundColor),
+      color: normalizedColor(style.color),
+      borderTopColor: normalizedColor(style.borderTopColor),
+      backgroundImage: style.backgroundImage,
+      boxShadow: style.boxShadow,
+      position: style.position,
+      fontSize: style.fontSize,
+      fontWeight: style.fontWeight,
+      borderRadius: style.borderRadius,
+      filter: style.filter,
+      opacity: style.opacity,
+    };
+    styleCache.set(element, snapshot);
+    return snapshot;
+  }
+
+  private findEffectiveBackground(
+    element: HTMLElement | null,
+    styleCache: StyleCache,
+  ): Rgb {
+    const layers: Rgb[] = [];
     let current = element;
-    for (let depth = 0; current && depth < 5; depth += 1) {
-      const color = parseRgb(getComputedStyle(current).backgroundColor);
-      if (color && color.a > 0.65) {
-        return transformBackground(
-          color,
-          this.palette,
-          this.classifySurface(current, getComputedStyle(current), color),
-        );
+    while (current) {
+      if (!current.classList.contains(IMAGE_OVERLAY_CLASS)) {
+        const style = this.readStyle(current, styleCache);
+        const original = parseRgb(style.backgroundColor);
+        const adapted = parseRgb(current.style.getPropertyValue('--nightfall-element-bg'));
+        if (adapted || (original && original.a > 0)) {
+          const preserved = current.classList.contains(ACCENT_BACKGROUND_CLASS) || style.backgroundImage !== 'none';
+          const color = adapted ?? (preserved ? original! : transformBackground(
+            original!, this.palette, this.classifySurface(current, style, original),
+          ));
+          layers.push(color);
+          if (color.a >= 1) break;
+        }
       }
       current = current.parentElement;
     }
-    return null;
+    return layers.reverse().reduce((background, layer) => composite(layer, background),
+      parseHex(this.palette.pageBackground));
   }
 
-  private isOverBackgroundImage(element: HTMLElement): boolean {
-    const layers: BackgroundLayer[] = [];
-    let current: HTMLElement | null = element;
+  private isOverBackgroundImage(
+    element: HTMLElement,
+    style: StyleSnapshot,
+    background: Rgb | null,
+    styleCache: StyleCache,
+  ): boolean {
+    if (element.closest(`.${IMAGE_OVERLAY_CLASS}`)) return true;
+
+    // The first background image or opaque color in the ancestor chain decides
+    // the result. The previous implementation scanned the complete chain even
+    // after the answer was known, and then scanned it again for the effective
+    // background.
+    if (style.backgroundImage !== 'none') return true;
+    if (background && background.a > 0.65) {
+      return false;
+    }
+
+    let current = element.parentElement;
     while (current) {
-      const style = getComputedStyle(current);
-      layers.push({
-        image: style.backgroundImage,
-        color: parseRgb(style.backgroundColor),
-      });
+      const ancestorStyle = this.readStyle(current, styleCache);
+      if (ancestorStyle.backgroundImage !== 'none') return true;
+      const ancestorBackground = parseRgb(ancestorStyle.backgroundColor);
+      if (ancestorBackground && ancestorBackground.a > 0.65) {
+        return false;
+      }
       current = current.parentElement;
     }
-    return shouldPreserveForeground(layers);
+    return false;
+  }
+
+  private isImageOverlay(
+    element: HTMLElement,
+    style: StyleSnapshot,
+    background: Rgb | null,
+    styleCache: StyleCache,
+    imageCache: ImageCache,
+  ): boolean {
+    if (
+      element.localName !== 'div' ||
+      !background ||
+      background.a <= 0.65 ||
+      style.backgroundImage !== 'none' ||
+      style.opacity !== '1' ||
+      this.isInteractive(element) ||
+      element.matches('dialog, [role="dialog"], [role="menu"], [role="listbox"], [popover]') ||
+      style.boxShadow !== 'none'
+    ) {
+      return false;
+    }
+
+    const container = this.findImageOverlayContainer(element, styleCache);
+    if (!container) return false;
+    if (
+      style.position === 'static' &&
+      !container.matches(IMAGE_OVERLAY_CONTAINER_SELECTOR)
+    ) {
+      return false;
+    }
+    let images = imageCache.get(container);
+    if (!images) {
+      images = Array.from(container.querySelectorAll<HTMLImageElement>('img'));
+      imageCache.set(container, images);
+    }
+
+    const overlayRect = element.getBoundingClientRect();
+    for (const image of images) {
+      if (element.contains(image)) continue;
+
+      const imageStyle = getComputedStyle(image);
+      if (
+        imageStyle.display === 'none' ||
+        imageStyle.visibility === 'hidden' ||
+        Number.parseFloat(imageStyle.opacity) === 0
+      ) {
+        continue;
+      }
+
+      const imageRect = image.getBoundingClientRect();
+      if (!hasSignificantImageOverlayOverlap(overlayRect, imageRect)) continue;
+      if (this.isPaintedAboveImage(element, image, overlayRect, imageRect)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private findImageOverlayContainer(
+    element: HTMLElement,
+    styleCache: StyleCache,
+  ): Element | null {
+    const painterContainer = element.closest(IMAGE_OVERLAY_CONTAINER_SELECTOR);
+    if (painterContainer) return painterContainer;
+
+    let current = element.parentElement;
+    while (current && current !== document.body) {
+      const style = this.readStyle(current, styleCache);
+      if (style.position !== 'static') return current;
+      current = current.parentElement;
+    }
+    return element.parentElement;
+  }
+
+  private isPaintedAboveImage(
+    element: HTMLElement,
+    image: HTMLImageElement,
+    overlayRect: RectLike,
+    imageRect: RectLike,
+  ): boolean {
+    if (typeof document.elementsFromPoint !== 'function') return false;
+
+    const left = Math.max(overlayRect.left, imageRect.left);
+    const top = Math.max(overlayRect.top, imageRect.top);
+    const right = Math.min(overlayRect.right, imageRect.right);
+    const bottom = Math.min(overlayRect.bottom, imageRect.bottom);
+    const width = right - left;
+    const height = bottom - top;
+    if (width <= 0 || height <= 0) return false;
+
+    const points: Array<[number, number]> = [
+      [left + width * 0.5, top + height * 0.5],
+      [left + width * 0.25, top + height * 0.25],
+      [left + width * 0.75, top + height * 0.25],
+      [left + width * 0.25, top + height * 0.75],
+      [left + width * 0.75, top + height * 0.75],
+    ];
+    let samplesAbove = 0;
+
+    for (const [x, y] of points) {
+      const stack = document.elementsFromPoint(x, y);
+      const overlayIndex = stack.findIndex((candidate) =>
+        candidate === element || element.contains(candidate),
+      );
+      const imageIndex = stack.indexOf(image);
+      if (overlayIndex >= 0 && imageIndex > overlayIndex) samplesAbove += 1;
+    }
+
+    return samplesAbove >= 1;
   }
 
   private clearAdaptation(element: HTMLElement): void {
@@ -695,17 +831,19 @@ export class NightfallEngine {
     element.classList.remove(ADAPTED_BORDER_CLASS);
     element.classList.remove(ACCENT_BACKGROUND_CLASS);
     element.classList.remove(IMAGE_BACKED_TEXT_CLASS);
+    element.classList.remove(IMAGE_OVERLAY_CLASS);
     element.classList.remove(IMAGE_BRIGHTNESS_CLASS);
     element.style.removeProperty('--nightfall-element-bg');
     element.style.removeProperty('--nightfall-element-fg');
+    element.style.removeProperty('--nightfall-original-fg');
     element.style.removeProperty('--nightfall-element-border');
     element.style.removeProperty('--nightfall-original-image-filter');
   }
 
-  private adaptImageBrightness(element: HTMLImageElement): void {
+  private adaptImageBrightness(element: HTMLImageElement, styleCache: StyleCache): void {
     this.clearAdaptation(element);
     if (this.settings.imageBrightness === 100) return;
-    const authoredFilter = getComputedStyle(element).filter;
+    const authoredFilter = this.readStyle(element, styleCache).filter;
     element.style.setProperty(
       '--nightfall-original-image-filter',
       authoredFilter === 'none' ? 'brightness(1)' : authoredFilter,
@@ -721,7 +859,7 @@ export class NightfallEngine {
 
   private isBadgeLike(
     element: HTMLElement,
-    style: CSSStyleDeclaration,
+    style: StyleSnapshot,
   ): boolean {
     if (
       element.matches('mark, output, [role="status"]') ||
@@ -742,7 +880,7 @@ export class NightfallEngine {
 
   private classifySurface(
     element: HTMLElement,
-    style: CSSStyleDeclaration,
+    style: StyleSnapshot,
     background: Rgb | null,
   ): SurfaceLevel {
     if (this.isInteractive(element)) return 'interactive';
@@ -768,7 +906,7 @@ export class NightfallEngine {
 
   private classifyText(
     element: HTMLElement,
-    style: CSSStyleDeclaration,
+    style: StyleSnapshot,
     foreground: Rgb,
   ): TextRole {
     if (element.matches(':disabled, [aria-disabled="true"]')) return 'disabled';

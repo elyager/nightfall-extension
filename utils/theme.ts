@@ -1,4 +1,4 @@
-export type ThemePreset = 'original' | 'slate-blue' | 'linear-dark' | 'github-dark' | 'ai';
+export type ThemePreset = 'original' | 'dark' | 'ai';
 export type SurfaceLevel =
   | 'page'
   | 'surface'
@@ -36,38 +36,9 @@ export interface ThemePalette {
   neutralBlend: number;
 }
 
-export const SLATE_BLUE: ThemePalette = {
-  id: 'slate-blue',
-  label: 'Slate Blue',
-  pageBackground: '#10141B',
-  surface: '#18202B',
-  elevatedSurface: '#202A38',
-  textPrimary: '#EDF2F7',
-  textSecondary: '#CBD5DF',
-  textMuted: '#A9B4C0',
-  textDisabled: '#778493',
-  border: '#364152',
-  borderSubtle: '#293444',
-  link: '#7DC4FF',
-  linkHover: '#9AD2FF',
-  linkVisited: '#A8DFFF',
-  controlBackground: '#18202B',
-  controlHover: '#344A66',
-  controlActive: '#3E5878',
-  controlDisabled: '#141A23',
-  focusRing: '#7DC4FF',
-  selectionBackground: '#234F73',
-  selectionText: '#FFFFFF',
-  scrollbarTrack: '#10141B',
-  scrollbarThumb: '#364152',
-  scrollbarThumbHover: '#4A5870',
-  shadow: 'rgba(0, 0, 0, 0.42)',
-  neutralBlend: 0.78,
-};
-
-export const LINEAR_DARK: ThemePalette = {
-  id: 'linear-dark',
-  label: 'Linear',
+export const DARK_THEME: ThemePalette = {
+  id: 'dark',
+  label: 'Dark',
   pageBackground: '#101010',
   surface: '#171717',
   elevatedSurface: '#1E1E1E',
@@ -94,46 +65,9 @@ export const LINEAR_DARK: ThemePalette = {
   neutralBlend: 0.84,
 };
 
-export const GITHUB_DARK: ThemePalette = {
-  id: 'github-dark',
-  label: 'GitHub',
-  pageBackground: '#0D1117',
-  surface: '#161B22',
-  elevatedSurface: '#21262D',
-  textPrimary: '#F0F6FC',
-  textSecondary: '#C9D1D9',
-  textMuted: '#8B949E',
-  textDisabled: '#6E7681',
-  border: '#30363D',
-  borderSubtle: '#21262D',
-  link: '#58A6FF',
-  linkHover: '#79C0FF',
-  linkVisited: '#A8DFFF',
-  controlBackground: '#21262D',
-  controlHover: '#384554',
-  controlActive: '#465568',
-  controlDisabled: '#161B22',
-  focusRing: '#1F6FEB',
-  selectionBackground: '#264F78',
-  selectionText: '#FFFFFF',
-  scrollbarTrack: '#0D1117',
-  scrollbarThumb: '#30363D',
-  scrollbarThumbHover: '#484F58',
-  shadow: 'rgba(1, 4, 9, 0.55)',
-  neutralBlend: 0.82,
-};
-
-export const themePresets: Record<Exclude<ThemePreset, 'ai'>, ThemePalette> = {
-  original: SLATE_BLUE,
-  'slate-blue': SLATE_BLUE,
-  'linear-dark': LINEAR_DARK,
-  'github-dark': GITHUB_DARK,
-};
-
 export function getThemePreset(
   theme: ThemePreset,
   generated?: ThemePalette,
 ): ThemePalette {
-  if (theme === 'ai') return generated ?? SLATE_BLUE;
-  return themePresets[theme];
+  return theme === 'ai' && generated ? generated : DARK_THEME;
 }

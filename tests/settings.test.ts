@@ -1,19 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { getSiteSettings, normalizeAiTheme, normalizeSettings } from '../utils/settings';
-import { SLATE_BLUE } from '../utils/theme';
+import { getSiteSettings, normalizeAiTheme, normalizeSettings, toggleSiteSettings } from '../utils/settings';
+import { DARK_THEME } from '../utils/theme';
 
 describe('settings', () => {
-  it('uses Original as the active default', () => {
-    expect(normalizeSettings().mode).toBe('original');
-    expect(normalizeSettings().imageBrightness).toBe(100);
-  });
-
-  it('normalizes partial stored values with safe defaults', () => {
-    const settings = normalizeSettings({ mode: 'linear-dark' });
-    expect(settings).not.toHaveProperty('controls');
-    expect(settings.mode).toBe('linear-dark');
-    expect(settings.imageBrightness).toBe(100);
-    expect(settings.revision).toBe(0);
+  it('uses Original with untouched images as the default', () => {
+    expect(normalizeSettings()).toMatchObject({ mode: 'original', imageBrightness: 100, revision: 0 });
   });
 
   it('constrains image brightness to the supported range', () => {
@@ -23,117 +14,93 @@ describe('settings', () => {
     expect(normalizeSettings({ imageBrightness: Number.NaN }).imageBrightness).toBe(100);
   });
 
-  it('migrates removed and legacy mode values to Original', () => {
-    expect(normalizeSettings({ mode: 'native' } as never).mode).toBe('original');
-    expect(normalizeSettings({ mode: 'dimmed-neutral' } as never).mode).toBe('original');
-    expect(normalizeSettings({ mode: 'off' } as never).mode).toBe('original');
-    expect(normalizeSettings({ mode: 'on' } as never).mode).toBe('original');
-    expect(normalizeSettings({ mode: 'auto' } as never).mode).toBe('original');
+  it.each(['slate-blue', 'linear-dark', 'github-dark'])('migrates %s to the single dark theme', (mode) => {
+    const settings = normalizeSettings({ mode, sites: {
+      'example.com': {
+        enabled: false,
+        mode,
+        repairs: [{ selector: '#main', path: '/pricing' }],
+        aiTheme: { ...DARK_THEME, id: 'ai' },
+      },
+    } });
+    expect(settings.mode).toBe('dark');
+    expect(settings.sites['example.com']).toMatchObject({
+      enabled: false,
+      mode: 'dark',
+      repairs: [{ selector: '#main', path: '/pricing' }],
+      aiTheme: { id: 'ai', pageBackground: DARK_THEME.pageBackground },
+    });
   });
 
-  it('preserves each available appearance mode', () => {
-    expect(normalizeSettings({ mode: 'original' }).mode).toBe('original');
-    expect(normalizeSettings({ mode: 'slate-blue' }).mode).toBe('slate-blue');
-    expect(normalizeSettings({ mode: 'linear-dark' }).mode).toBe('linear-dark');
-    expect(normalizeSettings({ mode: 'github-dark' }).mode).toBe('github-dark');
-    expect(normalizeSettings({ mode: 'ai' }).mode).toBe('ai');
+  it.each(['native', 'dimmed-neutral', 'off', 'on', 'auto', 'invalid'])('migrates removed mode %s to Original', (mode) => {
+    expect(normalizeSettings({ mode }).mode).toBe('original');
+  });
+
+  it.each(['original', 'dark', 'ai'])('preserves the %s appearance mode', (mode) => {
+    expect(normalizeSettings({ mode }).mode).toBe(mode);
   });
 
   it('accepts only constrained AI palette values', () => {
-    const valid = normalizeAiTheme({ ...SLATE_BLUE, id: 'ai', neutralBlend: 2 });
-    expect(valid).toMatchObject({ id: 'ai', label: 'AI', neutralBlend: 0.95 });
-    expect(normalizeAiTheme({ ...SLATE_BLUE, pageBackground: 'red; color: white' })).toBeUndefined();
-    expect(normalizeAiTheme({ ...SLATE_BLUE, shadow: 'url(https://example.com)' })).toBeUndefined();
-    expect(normalizeAiTheme({ ...SLATE_BLUE, textPrimary: '#10141B' })).toBeUndefined();
+    expect(normalizeAiTheme({ ...DARK_THEME, id: 'ai', neutralBlend: 2 }))
+      .toMatchObject({ id: 'ai', label: 'AI', neutralBlend: 0.95 });
+    expect(normalizeAiTheme({ ...DARK_THEME, pageBackground: 'red; color: white' })).toBeUndefined();
+    expect(normalizeAiTheme({ ...DARK_THEME, shadow: 'url(https://example.com)' })).toBeUndefined();
+    expect(normalizeAiTheme({ ...DARK_THEME, textPrimary: '#101010' })).toBeUndefined();
   });
 
-  it('starts each site on its untouched Original appearance', () => {
-    const settings = normalizeSettings({ mode: 'github-dark' });
-    expect(getSiteSettings(settings, 'mail.google.com')).toEqual({
-      enabled: true,
-      mode: 'original',
-      repairs: [],
+  it('starts each new site on its untouched Original appearance', () => {
+    expect(getSiteSettings(normalizeSettings({ mode: 'dark' }), 'mail.google.com')).toEqual({
+      enabled: true, mode: 'original', repairs: [],
     });
   });
 
-  it('normalizes and preserves a site-specific appearance mode', () => {
-    const settings = normalizeSettings({
-      sites: {
-        'example.com': { enabled: true, mode: 'linear-dark' },
-      },
-    });
-    expect(getSiteSettings(settings, 'example.com').mode).toBe('linear-dark');
-  });
-
-  it('inherits a parent site appearance on its subdomains', () => {
-    const settings = normalizeSettings({
-      sites: {
-        'devpost.com': {
-          enabled: true,
-          mode: 'github-dark',
-          repairs: [{ selector: '#main', path: '/' }],
-        },
-      },
-    });
-
+  it('inherits parent appearance, while keeping repairs local to the exact site', () => {
+    const settings = normalizeSettings({ sites: {
+      'devpost.com': { mode: 'dark', repairs: [{ selector: '#main', path: '/' }] },
+    } });
     expect(getSiteSettings(settings, 'info.devpost.com')).toEqual({
-      enabled: true,
-      mode: 'github-dark',
-      repairs: [],
+      enabled: true, mode: 'dark', repairs: [],
     });
   });
 
-  it('prefers an exact subdomain appearance over its parent site', () => {
-    const settings = normalizeSettings({
-      sites: {
-        'devpost.com': { enabled: true, mode: 'github-dark' },
-        'info.devpost.com': { enabled: false, mode: 'slate-blue' },
-      },
-    });
-
+  it('prefers an exact subdomain appearance over its parent', () => {
+    const settings = normalizeSettings({ sites: {
+      'devpost.com': { mode: 'dark' },
+      'info.devpost.com': { enabled: false, mode: 'ai' },
+    } });
     expect(getSiteSettings(settings, 'info.devpost.com')).toEqual({
-      enabled: false,
-      mode: 'slate-blue',
-      repairs: [],
+      enabled: false, mode: 'ai', repairs: [],
     });
   });
 
-  it('discards removed schedule settings and invalid legacy repairs', () => {
+  it('discards removed settings and invalid or duplicate repairs', () => {
     const settings = normalizeSettings({
       schedule: { enabled: true, start: '19:00', end: '07:00' },
-      sites: {
-        'example.com': {
-          enabled: false,
-          repairs: [{ selector: '#hero', action: 'original' }],
-        },
-      },
+      sites: { 'example.com': { enabled: false, repairs: [
+        { selector: ' #hero ', path: '/pricing' },
+        { selector: '#hero', path: '/pricing' },
+        { selector: '', path: '/pricing' },
+        { selector: '.legacy' },
+      ] } },
     } as never);
     expect(settings).not.toHaveProperty('schedule');
     expect(settings.sites['example.com']).toEqual({
-      enabled: false,
-      mode: 'original',
-      repairs: [],
+      enabled: false, mode: 'original', repairs: [{ selector: '#hero', path: '/pricing' }],
     });
   });
 
-  it('normalizes valid page-specific element repairs', () => {
-    const settings = normalizeSettings({
-      sites: {
-        'example.com': {
-          enabled: true,
-          mode: 'github-dark',
-          repairs: [
-            { selector: ' #hero ', path: '/pricing' },
-            { selector: '#hero', path: '/pricing' },
-            { selector: '', path: '/pricing' },
-            { selector: '.legacy' } as never,
-          ],
-        },
-      },
-    });
+  it('turns Original into Dark with the keyboard shortcut', () => {
+    expect(getSiteSettings(toggleSiteSettings(normalizeSettings(), 'example.com'), 'example.com'))
+      .toMatchObject({ enabled: true, mode: 'dark' });
+  });
 
-    expect(settings.sites['example.com']!.repairs).toEqual([
-      { selector: '#hero', path: '/pricing' },
-    ]);
+  it('toggles a generated AI theme off and back on without losing it', () => {
+    const initial = normalizeSettings({ sites: {
+      'example.com': { mode: 'ai', aiTheme: { ...DARK_THEME, id: 'ai' } },
+    } });
+    const off = toggleSiteSettings(initial, 'example.com');
+    expect(getSiteSettings(off, 'example.com')).toMatchObject({ enabled: false, mode: 'ai' });
+    expect(getSiteSettings(toggleSiteSettings(off, 'example.com'), 'example.com'))
+      .toMatchObject({ enabled: true, mode: 'ai', aiTheme: { id: 'ai' } });
   });
 });

@@ -45,7 +45,15 @@ export default defineContentScript({
     const engine = new NightfallEngine();
     let lastSettingsSignature = '';
     let latestRevision = 0;
-    let activeApply = engine.start();
+    let disposed = false;
+    // The user-origin layer overrides inline !important colors while leaving
+    // authored declarations intact. It is inactive whenever Nightfall is off.
+    const overridesReady = browser.runtime.sendMessage({ type: 'INSTALL_THEME_OVERRIDES' })
+      .then((response) => {
+        if (response?.ok === false) console.warn('[Nightfall] Priority styles unavailable:', response.error);
+      })
+      .catch((error: unknown) => console.warn('[Nightfall] Unable to install priority styles', error));
+    let activeApply = overridesReady.then(() => { if (!disposed) return engine.start(); });
     let stopPicker: (() => void) | undefined;
 
     const showToast = (message: string) => {
@@ -184,10 +192,16 @@ export default defineContentScript({
     const applySettings = (settings: Awaited<ReturnType<typeof loadSettings>>) => {
       if (settings.revision < latestRevision) return activeApply;
       latestRevision = settings.revision;
-      const signature = JSON.stringify(settings);
+      // Settings are stored globally, but a frame only depends on its own
+      // inherited site settings and the global image-brightness value. Avoid
+      // restarting every permitted tab when another site's preference changes.
+      const signature = JSON.stringify({
+        imageBrightness: settings.imageBrightness,
+        site: getSiteSettings(settings, location.hostname),
+      });
       if (signature === lastSettingsSignature) return activeApply;
       lastSettingsSignature = signature;
-      activeApply = engine.start(settings);
+      activeApply = overridesReady.then(() => { if (!disposed) return engine.start(settings); });
       return activeApply;
     };
 
@@ -226,6 +240,7 @@ export default defineContentScript({
             } satisfies ContentResponse));
           return true;
         }
+        if (message.type !== 'APPLY_SETTINGS') return;
         void applySettings(message.settings)
           .then(() =>
             sendResponse({
@@ -265,6 +280,7 @@ export default defineContentScript({
     contentScope[CONTENT_INSTANCE_KEY] = {
       protocolVersion: CONTENT_PROTOCOL_VERSION,
       dispose() {
+        disposed = true;
         browser.runtime.onMessage.removeListener(messageListener);
         browser.storage.onChanged.removeListener(storageListener);
         window.removeEventListener('popstate', syncNavigation);

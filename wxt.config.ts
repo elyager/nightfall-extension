@@ -18,6 +18,13 @@ export default defineConfig({
   }),
   manifest: {
     name: 'Nightfall',
+    author: { email: 'elyager@gmail.com' },
+    homepage_url: 'https://nightfall.elyager.com/',
+    minimum_chrome_version: '127',
+    action: {
+      default_title: 'Nightfall',
+      default_icon: { 16: 'icon/16.png', 32: 'icon/32.png', 48: 'icon/48.png', 128: 'icon/128.png' },
+    },
     permissions: ['activeTab', 'scripting', 'storage'],
     optional_host_permissions: ['http://*/*', 'https://*/*'],
     commands: {

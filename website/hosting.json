@@ -1,0 +1,27 @@
+{
+  "provider": "netlify",
+  "team_slug": "elyager",
+  "site_id": "b4f41f17-e807-4ad5-bef9-6ac818a483d1",
+  "site_name": "nightfall-elyager",
+  "homepage_url": "https://nightfall.elyager.com/",
+  "support_url": "https://nightfall.elyager.com/#contact",
+  "privacy_policy_url": "https://nightfall.elyager.com/privacy/",
+  "popup_privacy_redirect": "https://nightfall.elyager.com/privacy-policy.html",
+  "dashboard_url": "https://app.netlify.com/projects/nightfall-elyager",
+  "deploy_id": "6a9f580086adf6353f91cbbd",
+  "deploy_url": "https://6a9f580086adf6353f91cbbd--nightfall-elyager.netlify.app",
+  "published_at": "2026-09-07",
+  "publisher_name": "Erik Elyager",
+  "contact_email": "elyager@gmail.com",
+  "publish_directory": "public",
+  "built_with_badge_enabled": false,
+  "access": "public",
+  "primary_domain": "nightfall.elyager.com",
+  "dns_provider": "cloudflare",
+  "dns_record": {
+    "type": "CNAME",
+    "name": "nightfall",
+    "target": "nightfall-elyager.netlify.app",
+    "proxied": false
+  }
+}
