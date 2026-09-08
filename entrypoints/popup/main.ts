@@ -19,6 +19,7 @@ import {
   DEFAULT_SETTINGS,
   loadSettings,
   saveSettings,
+  toggleSiteSettings,
   type Mode,
   type NightfallSettings,
   type PerformanceStatus,
@@ -176,6 +177,12 @@ function render(status: PerformanceStatus | null) {
     ? getSiteSettings(settings, hostname)
     : getSiteSettings(settings, '');
   const selectedMode = siteSettings.enabled ? siteSettings.mode : 'original';
+  const extensionActive = hasAccess && siteSettings.enabled && siteSettings.mode !== 'original';
+  const toggleDescription = !hasAccess
+    ? 'Allow Nightfall on this site to activate it'
+    : extensionActive
+      ? 'Deactivate Nightfall for this site'
+      : 'Activate Nightfall for this site';
   const pageRepairs = repairsForPath(siteSettings.repairs, pagePath(currentUrl));
   const hasAiTheme = Boolean(siteSettings.aiTheme);
   const showAiSetup = selectedMode === 'ai' || aiSetupOpen;
@@ -201,6 +208,18 @@ function render(status: PerformanceStatus | null) {
         <h1>Nightfall</h1>
         <p class="site">${hostname || 'This page is protected'}</p>
       </div>
+      <button
+        class="extension-toggle ${extensionActive ? 'is-on' : 'is-off'}"
+        id="extension-toggle"
+        type="button"
+        aria-pressed="${extensionActive}"
+        aria-label="${toggleDescription}"
+        title="${toggleDescription}"
+        ${!hasAccess || !hostname ? 'disabled' : ''}
+      >
+        <span class="toggle-state" aria-hidden="true">${extensionActive ? 'On' : 'Off'}</span>
+        <span class="toggle-track" aria-hidden="true"><span class="toggle-thumb"></span></span>
+      </button>
     </header>
 
     ${hasAccess ? `<section class="mode" aria-label="Page appearance">${modeButtons}</section>` : ''}
@@ -353,6 +372,11 @@ async function generateAiTheme(): Promise<void> {
 }
 
 function bindEvents() {
+  app.querySelector<HTMLButtonElement>('#extension-toggle')?.addEventListener('click', () => {
+    if (!hostname || !hasAccess) return;
+    void persist(toggleSiteSettings(settings, hostname));
+  });
+
   app.querySelectorAll<HTMLButtonElement>('[data-mode]').forEach((button) => {
     button.addEventListener('click', () => {
       const mode = button.dataset.mode as Mode;

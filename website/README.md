@@ -14,4 +14,4 @@ netlify deploy --prod --no-build --site b4f41f17-e807-4ad5-bef9-6ac818a483d1 --d
 
 The primary domain is `nightfall.elyager.com`. Cloudflare provides a DNS-only `nightfall` CNAME pointing to `nightfall-elyager.netlify.app`; Netlify manages HTTPS. The Netlify address permanently redirects to the custom domain, preserving paths and query strings.
 
-No build or runtime JavaScript is needed. The Netlify configuration includes domain and privacy URL redirection and security headers. The provider's promotional badge is disabled. The website accurately displays the store release as pending; update its release link only after the public listing is available.
+No build or runtime JavaScript is needed. The Netlify configuration includes domain and privacy URL redirection and security headers. The provider's promotional badge is disabled. The homepage links to the public [Nightfall Chrome Web Store listing](https://chromewebstore.google.com/detail/nightfall/kliplffelmeeciahgamhfdmfnbghobfc?authuser=0&hl=en).

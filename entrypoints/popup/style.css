@@ -41,7 +41,7 @@ input:focus-visible {
 
 header {
   display: grid;
-  grid-template-columns: auto 1fr;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   gap: 10px;
   align-items: center;
   margin-bottom: 16px;
@@ -51,6 +51,66 @@ header {
   width: 34px;
   height: 34px;
   display: block;
+}
+
+.extension-toggle {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  border: 1px solid #31566a;
+  border-radius: 999px;
+  padding: 4px 5px 4px 8px;
+  background: #17394c;
+  color: #dff5ff;
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  transition: 140ms ease;
+}
+
+.extension-toggle.is-off {
+  border-color: #343b47;
+  background: #1b1f27;
+  color: #aeb5c0;
+}
+
+.toggle-track {
+  display: flex;
+  width: 22px;
+  height: 13px;
+  align-items: center;
+  border-radius: 999px;
+  padding: 2px;
+  box-sizing: border-box;
+  background: #4a5361;
+  transition: 140ms ease;
+}
+
+.toggle-thumb {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #d7dde5;
+  box-shadow: 0 1px 2px #080a0d66;
+  transition: 140ms ease;
+}
+
+.extension-toggle.is-on .toggle-track {
+  background: #55b6e8;
+}
+
+.extension-toggle.is-on .toggle-thumb {
+  transform: translateX(9px);
+  background: #ffffff;
+}
+
+.extension-toggle:disabled {
+  border-color: #292e39;
+  background: #171a20;
+  color: #646b76;
+  cursor: not-allowed;
+  opacity: 0.72;
 }
 
 a { color: #91c9ed; }
